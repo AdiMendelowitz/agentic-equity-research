@@ -1,0 +1,32 @@
+# internal controls and session records (never public)
+notes/
+CLAUDE.md
+# secrets and runtime state
+.env
+.cache/
+*.db
+artifacts/
+ml_models/
+**/ml_models/
+*.joblib
+*.lock
+!uv.lock
+eval_log/
+logs/
+# python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+# editors and OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+# temporary files left by a mounted-folder editor
+.fuse_hidden*

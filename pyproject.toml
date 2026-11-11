@@ -1,0 +1,85 @@
+[project]
+name = "agentic-equity-research"
+version = "0.1.0"
+description = "A multi-agent equity-research pipeline with cost-governed LLM routing, Python-first signal logic, a calibrated abstention gate and an honest evaluation layer. Demonstration project; not investment advice."
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Adi Mendelowitz" }]
+requires-python = ">=3.12"
+dependencies = [
+    "langgraph>=0.2",
+    "pydantic>=2.9",
+    "pydantic-settings>=2.6",
+    "python-dotenv>=1.0",
+    "numpy>=2.1",
+    "pandas>=2.2",
+    "scipy>=1.14",
+    "scikit-learn>=1.4",
+    "lightgbm>=4.6",
+    "statsmodels>=0.14",
+    "pandas-ta>=0.3",
+    "pandas-market-calendars>=5.4",
+    "empyrical-reloaded>=0.5.9",
+    "yfinance>=0.2.50",
+    "fredapi>=0.5",
+    "requests>=2.32",
+    "feedparser>=6.0",
+    "beautifulsoup4>=4.12",
+    "lxml>=4.9",
+    "python-dateutil>=2.9",
+    "portalocker>=2.0",
+    "anthropic>=0.101",
+    "openai>=1.0",
+]
+
+[project.optional-dependencies]
+live = ["streamlit>=1.40", "plotly>=5.24"]
+dev = ["pytest>=8.0", "pytest-asyncio>=0.24", "ruff>=0.6", "black>=24.0", "mypy>=1.11", "pip-licenses>=5.0", "types-requests", "pandas-stubs", "matplotlib>=3.9", "hypothesis>=6.100"]
+
+[project.scripts]
+aer-demo = "aer.demo.cli:main"
+
+[tool.uv]
+# pandas-ta 0.4.71b0 pins numba==0.61.2, whose llvmlite has no Python 3.14 wheel; numba 0.63 and later support 3.14.
+# Remove this override when the indicators no longer depend on pandas-ta.
+override-dependencies = ["numba>=0.63"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/aer"]
+
+[tool.black]
+line-length = 120
+target-version = ["py312"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+ignore = ["E501"]  # line length is black's job
+# B and UP are the stretch set recorded in STATUS, enabled when the count reaches zero
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["E402"]
+"src/aer/graph.py" = ["E402"]  # the deprecation filter must precede the langgraph import
+
+[tool.mypy]
+python_version = "3.14"
+mypy_path = "src"
+packages = ["aer"]
+ignore_missing_imports = true
+explicit_package_bases = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-m 'not live' -q"
+markers = [
+    "live: reaches the network or a live model provider; never run in CI",
+    "integration: exercises several components together without the network",
+]
+filterwarnings = ["ignore::DeprecationWarning:pandas_ta"]

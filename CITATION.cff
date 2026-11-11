@@ -1,0 +1,26 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "agentic-equity-research"
+type: software
+authors:
+  - family-names: "Mendelowitz"
+    given-names: "Adi"
+version: "0.1.0"
+date-released: "2026-11-11"
+license: MIT
+repository-code: "https://github.com/AdiMendelowitz/agentic-equity-research"
+url: "https://adimendelowitz.dev"
+abstract: >-
+  A multi-agent LLM equity-research pipeline with cost-governed model routing,
+  deterministic signal code, a calibrated ML gate that can abstain, and an
+  evaluation with a pre-registered control experiment. A research demonstration,
+  not investment advice.
+keywords:
+  - multi-agent systems
+  - large language models
+  - model routing
+  - machine learning
+  - evaluation
+  - calibration
+  - pre-registration
+  - time series

@@ -1,0 +1,55 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+  pull-requests: read
+jobs:
+  guards:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with: { fetch-depth: 0 }
+      - name: secrets scan (every push)
+        uses: gitleaks/gitleaks-action@v3
+        env: { GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}", GITLEAKS_ENABLE_COMMENTS: "false" }
+      - name: internal files are not tracked
+        run: test -z "$(git ls-files notes CLAUDE.md)"
+      - name: commit authors use the noreply identity
+        run: |
+          bad=$(git log --format='%ae' | grep -v 'users.noreply.github.com' || true)
+          test -z "$bad" || { echo "non-noreply author email found"; exit 1; }
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2  # v10.3.3
+      - name: redaction scan
+        run: python3 tools/redact_check.py
+      - name: licence audit of the locked environment (no GPL or AGPL)
+        env: { UV_PYTHON: "3.14" }
+        run: |
+          uv python install 3.14
+          uv sync --python 3.14 --extra dev
+          uv run pip-licenses --fail-on="GNU General Public License v3 (GPLv3);GNU General Public License v2 (GPLv2);GNU Affero General Public License v3 (AGPLv3);GPLv3;GPLv2;AGPLv3" --summary
+  tests:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.12", "3.13", "3.14"]
+    env:
+      UV_PYTHON: ${{ matrix.python }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2  # v10.3.3
+      - run: uv python install ${{ matrix.python }}
+      - run: uv sync --python ${{ matrix.python }} --extra dev
+      - run: uv run ruff check src tests tools docs/report
+      - run: uv run black --check --line-length 120 src tests tools docs/report
+      - name: mypy (non-blocking; count recorded in the job log)
+        run: uv run mypy || true
+        continue-on-error: true
+      - run: uv run pytest --collect-only -q
+      - run: uv run pytest -m "not live" -q
+      - name: offline demo smoke (blocking)
+        run: env -u ANTHROPIC_API_KEY -u OPENROUTER_API_KEY -u GROQ_API_KEY -u NVIDIA_NIM_API_KEY uv run aer-demo --tickers 2 --days 300
