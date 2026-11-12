@@ -30,3 +30,5 @@ build/
 Thumbs.db
 # temporary files left by a mounted-folder editor
 .fuse_hidden*
+# built report (GitHub Pages builds its own)
+site/

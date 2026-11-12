@@ -41,7 +41,7 @@ ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = ROOT / "docs" / "data"
 DEFAULT_OUT = ROOT / "docs" / "img"
 
-PALETTE = {"blue": "#0072B2", "orange": "#E69F00", "vermillion": "#D55E00", "grey": "#8C8C8C", "dark": "#333333"}
+PALETTE = {"blue": "#4C78A8", "orange": "#C08A4A", "vermillion": "#B5604F", "grey": "#8A94A3", "dark": "#374151"}
 MIN_N = 10
 Z95 = 1.959963984540054
 FOOTER = "Whole-sample aggregates; no ticker, week or date dimension is published."
@@ -140,13 +140,13 @@ def sharpe_bin_order() -> list[str]:
 
 
 def add_footer(fig: Figure, extra: str | None = None) -> None:
-    fig.text(0.01, 0.012, FOOTER, fontsize=8, color=PALETTE["dark"])
+    fig.text(0.01, 0.012, FOOTER, fontsize=9, color=PALETTE["dark"])
     if extra:
-        fig.text(0.01, 0.04, extra, fontsize=8, color=PALETTE["dark"])
+        fig.text(0.01, 0.04, extra, fontsize=9, color=PALETTE["dark"])
 
 
 def add_legend(fig: Figure, handles: list[Artist], ncol: int = 2, y: float = 0.045) -> None:
-    fig.legend(handles=handles, loc="lower center", bbox_to_anchor=(0.5, y), ncol=ncol, fontsize=8, frameon=False)
+    fig.legend(handles=handles, loc="lower center", bbox_to_anchor=(0.5, y), ncol=ncol, fontsize=9, frameon=False)
 
 
 def rate_handles() -> list[Line2D]:
@@ -187,7 +187,7 @@ def draw_rates(ax: Axes, xs: list[float], ks: list[int], ns: list[int]) -> None:
             linewidths=1.6,
             zorder=3,
         )
-        ax.annotate(f"n={n}", (x, hi), xytext=(0, 6), textcoords="offset points", ha="center", fontsize=8)
+        ax.annotate(f"n={n}", (x, hi), xytext=(0, 6), textcoords="offset points", ha="center", fontsize=9)
 
 
 def reference_line(ax: Axes) -> Line2D:
@@ -204,7 +204,7 @@ def fig_calibration() -> Figure:
     mids = [bin_midpoint(label) for label in labels]
     numeric = all(m is not None for m in mids)
     xs = [float(m) for m in mids if m is not None] if numeric else [float(i) for i in range(len(labels))]
-    fig, ax = plt.subplots(figsize=(8, 5.2))
+    fig, ax = plt.subplots(figsize=(6.8, 4.4))
     handles = [reference_line(ax)]
     if numeric:
         (ident,) = ax.plot([0, 1], [0, 1], color=PALETTE["vermillion"], linewidth=1.2, label="perfect calibration")
@@ -214,7 +214,7 @@ def fig_calibration() -> Figure:
     draw_rates(ax, xs, ks, ns)
     ax.set_ylim(0, 1.12)
     ax.set_xlabel("Conviction bin (as labelled in the data)")
-    ax.set_ylabel("Observed hit rate (share of resolved calls correct)")
+    ax.set_ylabel("Hit rate (resolved calls)")
     ax.set_title(f"Hit rate by conviction bin with 95% Wilson intervals (n={sum(ns)} resolved)", fontsize=11)
     fig.tight_layout(rect=(0, 0.17, 1, 1))
     add_legend(fig, handles + rate_handles())
@@ -228,16 +228,16 @@ def fig_recommendation() -> Figure:
     ns = [int(r["n_resolved"]) for r in rows]
     ks = [int(r["n_synth_correct"]) for r in rows]
     xs = [float(i) for i in range(len(labels))]
-    fig, ax = plt.subplots(figsize=(8, 5.2))
+    fig, ax = plt.subplots(figsize=(6.8, 4.4))
     handles = [reference_line(ax)]
     ax.set_xticks(xs, labels)
     draw_rates(ax, xs, ks, ns)
     for x, n_rows, n in zip(xs, (int(r["n_rows"]) for r in rows), ns, strict=True):
         if n == 0:
-            ax.text(x, 0.05, f"no resolved rows\n(n_rows={n_rows})", ha="center", fontsize=8, color=PALETTE["grey"])
+            ax.text(x, 0.05, f"no resolved rows\n(n_rows={n_rows})", ha="center", fontsize=9, color=PALETTE["grey"])
     ax.set_ylim(0, 1.12)
     ax.set_xlabel("Recommendation")
-    ax.set_ylabel("Observed hit rate (share of resolved rows correct)")
+    ax.set_ylabel("Hit rate (resolved rows)")
     ax.set_title(f"Hit rate by recommendation with 95% Wilson intervals (n={sum(ns)} resolved)", fontsize=11)
     fig.tight_layout(rect=(0, 0.17, 1, 1))
     add_legend(fig, handles + rate_handles())
@@ -253,21 +253,21 @@ def fig_ml_gate() -> Figure:
     n_ml = [int(r["n_ml_resolved"]) for r in rows]
     k_ml = [int(r["n_ml_correct"]) for r in rows]
     xs = [float(i) for i in range(len(labels))]
-    fig, (top, bottom) = plt.subplots(2, 1, sharex=True, figsize=(8.5, 7))
+    fig, (top, bottom) = plt.subplots(2, 1, sharex=True, figsize=(7.2, 6))
     for x, s, n in zip(xs, skipped, n_rows, strict=True):
         small = n < MIN_N
         colour = PALETTE["grey"] if small else PALETTE["orange"]
         top.bar(x, s / n, width=0.6, facecolor="none" if small else colour, edgecolor=colour, linewidth=1.4)
-        top.annotate(f"n={n}", (x, s / n), xytext=(0, 4), textcoords="offset points", ha="center", fontsize=8)
+        top.annotate(f"n={n}", (x, s / n), xytext=(0, 4), textcoords="offset points", ha="center", fontsize=9)
     top.set_ylim(0, 1.12)
-    top.set_ylabel("Share of rows abstained on")
+    top.set_ylabel("Share abstained")
     top.set_title("(a) Rows on which the gate abstained", loc="left", fontsize=10)
     handles = [reference_line(bottom)]
     draw_rates(bottom, xs, k_ml, n_ml)
     bottom.set_xticks(xs, labels)
     bottom.set_ylim(0, 1.12)
     bottom.set_xlabel("Cross-validated F1 bin (as labelled in the data)")
-    bottom.set_ylabel("Accuracy of predictions made")
+    bottom.set_ylabel("Accuracy")
     bottom.set_title("(b) Accuracy where the gate predicted, 95% Wilson intervals", loc="left", fontsize=10)
     fig.suptitle(f"ML gate by cross-validated F1 bin (n={sum(n_rows)} rows, {sum(n_ml)} predictions)", fontsize=11)
     fig.tight_layout(rect=(0, 0.17, 1, 0.97))
@@ -280,12 +280,12 @@ def fig_sharpe() -> Figure:
     rows = sharpe_rows()
     labels = [r["sharpe_bin"] for r in rows]
     ns = [int(r["n_rows"]) for r in rows]
-    fig, ax = plt.subplots(figsize=(8, 5.2))
+    fig, ax = plt.subplots(figsize=(6.8, 4.4))
     for i, n in enumerate(ns):
         small = n < MIN_N
         colour = PALETTE["grey"] if small else PALETTE["blue"]
         ax.bar(i, n, width=0.6, facecolor="none" if small else colour, edgecolor=colour, linewidth=1.4)
-        ax.annotate(f"n={n}", (i, n), xytext=(0, 4), textcoords="offset points", ha="center", fontsize=8)
+        ax.annotate(f"n={n}", (i, n), xytext=(0, 4), textcoords="offset points", ha="center", fontsize=9)
     ax.set_xticks(range(len(labels)), labels)
     ax.set_ylim(0, max(ns) * 1.12)
     ax.set_xlabel("Sharpe-ratio bin (as labelled in the data)")
@@ -310,7 +310,7 @@ def fig_runs() -> Figure:
         (1, "complete, non-zero exit code", PALETTE["orange"], "s"),
         (0, "no end line logged", PALETTE["vermillion"], "X"),
     )
-    fig, ax = plt.subplots(figsize=(9, 4.2))
+    fig, ax = plt.subplots(figsize=(7.6, 3.6))
     for y, name, colour, marker in spec:
         state = 2 - y
         xs = [d for d, st in zip(dates, states, strict=True) if st == state]
@@ -344,7 +344,7 @@ def fig_llm() -> Figure:
         acc[2] += int(str(e["out_tokens"]))
     names = sorted(totals, key=lambda k: (-totals[k][0], k))
     ys = list(range(len(names)))[::-1]
-    fig, (left, right) = plt.subplots(1, 2, sharey=True, figsize=(11, 4.6))
+    fig, (left, right) = plt.subplots(1, 2, sharey=True, figsize=(9.4, 3.9))
     left.barh(ys, [totals[k][0] for k in names], color=PALETTE["blue"])
     right.barh(ys, [totals[k][1] for k in names], color=PALETTE["orange"], label="input tokens")
     right.barh(
@@ -356,16 +356,17 @@ def fig_llm() -> Figure:
     )
     for y, k in zip(ys, names, strict=True):
         left.annotate(
-            f"{totals[k][0]:,}", (totals[k][0], y), xytext=(4, 0), textcoords="offset points", va="center", fontsize=8
+            f"{totals[k][0]:,}", (totals[k][0], y), xytext=(4, 0), textcoords="offset points", va="center", fontsize=9
         )
         end = totals[k][1] + totals[k][2]
-        right.annotate(f"{end:,}", (end, y), xytext=(4, 0), textcoords="offset points", va="center", fontsize=8)
+        right.annotate(f"{end:,}", (end, y), xytext=(4, 0), textcoords="offset points", va="center", fontsize=9)
     left.set_yticks(ys, names)
     thousands = FuncFormatter(lambda v, _: f"{v:,.0f}")
-    for ax, label in ((left, "Model calls (count)"), (right, "Tokens (count)")):
-        ax.xaxis.set_major_formatter(thousands)
+    millions = FuncFormatter(lambda v, _: f"{v / 1e6:.0f}M")
+    for ax, label, fmt in ((left, "Model calls (count)", thousands), (right, "Tokens (millions)", millions)):
+        ax.xaxis.set_major_formatter(fmt)
         ax.set_xlabel(label)
-        ax.margins(x=0.18)
+        ax.margins(x=0.3)
     left.set_ylabel("Provider and model")
     left.set_title("(a) Calls", loc="left", fontsize=10)
     right.set_title("(b) Tokens", loc="left", fontsize=10)
@@ -373,7 +374,7 @@ def fig_llm() -> Figure:
     fig.tight_layout(rect=(0, 0.14, 1, 0.97))
     handles, _ = right.get_legend_handles_labels()
     add_legend(fig, list(handles), ncol=2, y=0.045)
-    fig.text(0.01, 0.012, "Grouping: provider and model; counts as logged per run.", fontsize=8, color=PALETTE["dark"])
+    fig.text(0.01, 0.012, "Grouping: provider and model; counts as logged per run.", fontsize=9, color=PALETTE["dark"])
     return fig
 
 
@@ -381,7 +382,7 @@ def fig_detection() -> Figure:
     rows = read_rows("detection_curve.csv")
     signals = sorted({float(r["signal"]) for r in rows})
     seeds = len({r["seed"] for r in rows})
-    fig, ax = plt.subplots(figsize=(8.5, 5.6))
+    fig, ax = plt.subplots(figsize=(7.2, 4.8))
     handles = [reference_line(ax)]
     oracle_means: list[float] = []
     majority_means: list[float] = []
@@ -398,12 +399,12 @@ def fig_detection() -> Figure:
         majority_means.append(sum(majority) / len(majority))
         ax.errorbar(x, mean, yerr=half, fmt="o", color=PALETTE["blue"], capsize=4, elinewidth=1.4, zorder=3)
         ax.annotate(
-            f"gate predicted in\n{predicted} of {len(group)} cells",
-            (x, mean + half),
-            xytext=(0, 8),
-            textcoords="offset points",
+            f"gate predicted {predicted}/{len(group)}",
+            (x, 0.39),
             ha="center",
-            fontsize=8,
+            va="bottom",
+            fontsize=9,
+            color=PALETTE["dark"],
         )
     rho2 = [18 * s * s / (5 + 21 * s * s + 2 * math.sqrt(10) * s) for s in signals]
     ceiling = [0.5 + math.asin(math.sqrt(v)) / math.pi for v in rho2]
@@ -412,9 +413,10 @@ def fig_detection() -> Figure:
         signals, ceiling, color=PALETTE["orange"], linewidth=1.4, linestyle=":", label="analytic ceiling"
     )
     ax.scatter(signals, majority_means, marker="s", s=36, color=PALETTE["grey"], zorder=2)
-    ax.set_ylim(0.4, 0.85)
+    ax.set_ylim(0.38, 0.85)
+    ax.set_xlim(signals[0] - 0.09, signals[-1] + 0.09)
     ax.set_xlabel("Injected signal strength")
-    ax.set_ylabel("Balanced accuracy, out of sample (mean across seeds)")
+    ax.set_ylabel("Balanced accuracy (out of sample)")
     ax.set_title(
         f"Detection of an injected signal: balanced accuracy, 95% interval ({seeds} seeds, {len(rows)} cells)",
         fontsize=10,
@@ -426,7 +428,7 @@ def fig_detection() -> Figure:
     )
     add_legend(fig, handles + [oracle_line, ceiling_line, mean_handle, majority_handle], ncol=3)
     note = "Synthetic data with a known injected signal; no market data."
-    fig.text(0.01, 0.012, note, fontsize=8, color=PALETTE["dark"])
+    fig.text(0.01, 0.012, note, fontsize=9, color=PALETTE["dark"])
     return fig
 
 

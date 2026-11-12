@@ -1,0 +1,23 @@
+%% Source for docs/diagrams/control-design.svg. Render from the repository root:
+%% npx -y @mermaid-js/mermaid-cli@11 -c docs/diagrams/src/mermaid-config.json -i docs/diagrams/src/control-design.mmd -o docs/diagrams/control-design.svg -b white
+flowchart TB
+    gen["Generator: injected signal s, 20 seeds"] --> prices["Synthetic prices, 1,500 sessions"]
+    prices --> feats["Features and five-day labels"]
+    feats --> split["Chronological split: last 20% held out after a purge gap"]
+    split --> clf["One classifier per seed"]
+    gen --> oracle["Oracle: true conditional mean"]
+    gen --> ceiling["Analytic ceiling"]
+    clf --> balacc["Balanced accuracy"]
+    oracle --> balacc
+    balacc --> expect["Five expectations, fixed before the run"]
+    ceiling --> expect
+    classDef gen fill:#F2DDE7,stroke:#9C5F7E,stroke-width:1.5px,color:#1F2937
+    classDef data fill:#DCE8F5,stroke:#4C78A8,stroke-width:1.5px,color:#1F2937
+    classDef model fill:#D5EBDD,stroke:#4E8F6E,stroke-width:1.5px,color:#1F2937
+    classDef ref fill:#F5E6CF,stroke:#B08550,stroke-width:1.5px,color:#1F2937
+    classDef verdict fill:#E6E0F3,stroke:#7A6AA6,stroke-width:1.5px,color:#1F2937
+    class gen gen
+    class prices,feats,split data
+    class clf model
+    class oracle,ceiling ref
+    class balacc,expect verdict

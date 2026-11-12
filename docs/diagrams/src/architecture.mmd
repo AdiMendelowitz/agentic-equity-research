@@ -1,0 +1,37 @@
+%% Source for docs/diagrams/architecture.svg. Render from the repository root:
+%% npx -y @mermaid-js/mermaid-cli@11 -c docs/diagrams/src/mermaid-config.json -i docs/diagrams/src/architecture.mmd -o docs/diagrams/architecture.svg -b white
+flowchart TB
+    ind["Deterministic indicators"] --> agents
+    subgraph agents ["Five agents in parallel"]
+        direction LR
+        fund["Fundamental"]
+        tech["Technical"]
+        sent["Sentiment"]
+        macro["Macro"]
+        pos["Positioning"]
+        fund ~~~ tech ~~~ sent ~~~ macro ~~~ pos
+    end
+    agents --> synth["Synthesis"] --> post["Post-processing"] --> gate{"ML gate"}
+    gate -->|"cross-validation passes"| calib["Calibrated probability"]
+    gate -->|"cross-validation fails"| abstain["Abstain"]
+    agents -.->|"model calls"| routing
+    synth -.-> routing
+    subgraph routing ["Model routing, cheapest first"]
+        direction TB
+        freeone["Free primary"] --> freetwo["Free secondary"] --> ollama["Local Ollama"] --> paidfb["Paid fallback"]
+    end
+    routing -.-> ledger[("Usage ledger")]
+    classDef code fill:#DCE8F5,stroke:#4C78A8,stroke-width:1.5px,color:#1F2937
+    classDef agent fill:#E6E0F3,stroke:#7A6AA6,stroke-width:1.5px,color:#1F2937
+    classDef llm fill:#F2DDE7,stroke:#9C5F7E,stroke-width:1.5px,color:#1F2937
+    classDef ml fill:#D5EBDD,stroke:#4E8F6E,stroke-width:1.5px,color:#1F2937
+    classDef stop fill:#F3D6CF,stroke:#B5604F,stroke-width:1.5px,color:#1F2937
+    classDef free fill:#EEF6F1,stroke:#4E8F6E,stroke-width:1.5px,color:#1F2937
+    classDef paid fill:#F5E6CF,stroke:#B08550,stroke-width:1.5px,color:#1F2937
+    class ind,post,ledger code
+    class fund,tech,sent,macro,pos agent
+    class synth llm
+    class gate,calib ml
+    class abstain stop
+    class freeone,freetwo,ollama free
+    class paidfb paid

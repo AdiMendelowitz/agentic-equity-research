@@ -2,6 +2,8 @@
 
 These notes record what a first system taught, grouped by the six capabilities in this repository and then by cross-cutting practice. Each lesson names the test or check that enforces it. Where no enforcing check exists yet, the entry says Planned and states what it will check.
 
+<p align="center"><img src="../diagrams/lessons-map.svg" alt="Each capability mapped to the tests that check it" width="520"></p>
+
 ## Multi-agent pipeline
 
 Keep the graph shape fixed at five parallel agents and one synthesis node, and let a failed agent degrade one section of the brief rather than the whole run.

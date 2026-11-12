@@ -1,0 +1,13 @@
+%% Source for docs/diagrams/lessons-map.svg. Render from the repository root:
+%% npx -y @mermaid-js/mermaid-cli@11 -c docs/diagrams/src/mermaid-config.json -i docs/diagrams/src/lessons-map.mmd -o docs/diagrams/lessons-map.svg -b white
+flowchart LR
+    capa["Multi-agent pipeline"] --> tsta["test_graph, test_circuit_breaker"]
+    capb["Cost-governed routing"] --> tstb["test_usage_meter, test_ollama_cascade"]
+    capc["Python-first signals"] --> tstc["test_python_replacements, test_signal_boundaries"]
+    capd["ML layer"] --> tstd["test_leakage, test_control"]
+    cape["Evaluation"] --> tste["test_evaluation_spec, test_power"]
+    capf["Operations"] --> tstf["test_pipeline_heartbeat, test_prefetch_manifest"]
+    classDef cap fill:#DCE8F5,stroke:#4C78A8,stroke-width:1.5px,color:#1F2937
+    classDef test fill:#D5EBDD,stroke:#4E8F6E,stroke-width:1.5px,color:#1F2937
+    class capa,capb,capc,capd,cape,capf cap
+    class tsta,tstb,tstc,tstd,tste,tstf test
