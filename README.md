@@ -18,6 +18,7 @@
 - **No measurable edge on recorded output.** 342 of 707 resolved calls were correct (0.484, about 0.45 to 0.52), and detecting 0.55 against 0.50 would need about 783 independent calls.
 - **The harness detects a signal that exists, under a known generator.** In a pre-registered control on synthetic prices, the deployed calibrated ensemble scores balanced accuracy 0.530 and 0.565 at the two non-zero signal strengths, both above 0.50 after a Holm adjustment, and stays within 0.03 of chance at zero signal. A rule that thresholds the true conditional mean is 0.104 and 0.145 ahead.
 - **The ML gate barely separates signal from noise.** In that control it passed in 4 of 46 seeds with no signal and 11 of 46 at the strongest, a descriptive count and not a tested endpoint; a conformal gate is the next candidate, to be tested against matched-coverage selection.
+- **The multi-agent design is not yet justified by evidence.** Nothing here compares the five agents with one well-prompted model on the same data; that comparison is on the roadmap.
 
 <p align="center"><img src="docs/img/detection_curve.svg" alt="Model and oracle balanced accuracy against injected signal strength, with the analytic ceiling and the 0.50 chance line" width="680"></p>
 
@@ -95,7 +96,22 @@ By conviction bin, the 0.6 bin scored 135 of 305 (0.443), the 0.7 bin 186 of 349
 
 ## Does the harness detect a signal that exists?
 
-A null result means little unless the harness can find a signal when one is there. The control, in its version 2, injects a signal of strength s into synthetic prices (20 seeds per strength, 1,500 sessions each) and scores balanced accuracy, whose expected value without skill is 0.50 at any class balance. The model is one uncalibrated classifier per seed: the gate's cross-validation picks LightGBM or logistic regression, with logistic regression when the gate abstains. The deployed calibrated ensemble is not what this measures. Model figures cover all 20 seeds.
+A null result means little unless the harness can find a signal when one is there. The control injects a signal of strength s into synthetic prices (1,500 sessions per seed) and scores balanced accuracy, whose expected value without skill is 0.50 at any class balance.
+
+The current control, version 3, is pre-registered. It scores the deployed calibrated ensemble on 46 fresh seeds per strength. Its specification, `docs/prereg/control-v3.md`, was released in a public commit and hashed in [issue 1](https://github.com/AdiMendelowitz/agentic-equity-research/issues/1) before the first public commit of the results; the seed count comes from a power calculation for a margin of 0.03.
+
+| Signal strength s | Model balanced accuracy | Pre-registered test | Verdict | Gate passed |
+| --- | --- | --- | --- | --- |
+| 0.0 | 0.516 | 90% interval 0.510 to 0.522 inside 0.47 to 0.53 | within the 0.03 margin of chance: met | 4 of 46 seeds |
+| 0.3 | 0.530 | lower bound 0.519, Holm-adjusted p below 0.001 | above chance: met | 5 of 46 seeds |
+| 0.6 | 0.565 | lower bound 0.547, Holm-adjusted p below 0.001 | above chance: met | 11 of 46 seeds |
+
+A rule that thresholds the true conditional mean stays 0.104 and 0.145 ahead at s = 0.3 and 0.6. At zero signal the model is inside the margin but slightly above 0.50; the report page carries an exploratory analysis of that excess, whose cause is not identified. The command is `uv run python docs/report/run_control_v3.py`.
+
+<details>
+<summary>Earlier versions of the control (1 and 2)</summary>
+
+Version 2 used 20 seeds per strength. The model is one uncalibrated classifier per seed: the gate's cross-validation picks LightGBM or logistic regression, with logistic regression when the gate abstains. The deployed calibrated ensemble is not what this measures. Model figures cover all 20 seeds.
 
 <p align="center"><img src="docs/diagrams/control-design.svg" alt="Control design: a known injected signal, one classifier per seed, compared with the oracle and the analytic ceiling" width="630"></p>
 
@@ -111,17 +127,7 @@ The negative control was met narrowly. At zero signal the upper bound of the int
 
 The first run failed as a design and stays on record in `docs/data/detection_curve_run1.csv`. Its injected signal fed back on itself, which turned the strongest setting into a runaway trend, and raw accuracy tracked the label base rate. Version 2 removed the feedback and switched to balanced accuracy. The command is `uv run python docs/report/run_control.py`.
 
-### Version 3, pre-registered
-
-Version 3 scores the deployed calibrated ensemble on 46 fresh seeds per strength. Its specification, `docs/prereg/control-v3.md`, was released in a public commit and hashed in [issue 1](https://github.com/AdiMendelowitz/agentic-equity-research/issues/1) before the first public commit of the results; the seed count comes from a power calculation for a margin of 0.03.
-
-| Signal strength s | Model balanced accuracy | Pre-registered test | Verdict | Gate passed |
-| --- | --- | --- | --- | --- |
-| 0.0 | 0.516 | 90% interval 0.510 to 0.522 inside 0.47 to 0.53 | within the 0.03 margin of chance: met | 4 of 46 seeds |
-| 0.3 | 0.530 | lower bound 0.519, Holm-adjusted p below 0.001 | above chance: met | 5 of 46 seeds |
-| 0.6 | 0.565 | lower bound 0.547, Holm-adjusted p below 0.001 | above chance: met | 11 of 46 seeds |
-
-The oracle stays 0.104 and 0.145 ahead at s = 0.3 and 0.6. At zero signal the interval sits inside the margin but above 0.50. Being within the margin is not evidence that the mean equals 0.50. An exploratory rerun on 300 further seeds, reported with its figures on the report page, is consistent with the excess being a finite-window property of the per-seed statistic, does not identify its cause, and has one control interval that misses its expected value. The command is `uv run python docs/report/run_control_v3.py`.
+</details>
 
 ## What the tests check
 
