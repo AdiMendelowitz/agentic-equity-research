@@ -16,7 +16,7 @@
 ## Results at a glance
 
 - **No measurable edge on recorded output.** 342 of 707 resolved calls were correct (0.484, about 0.45 to 0.52), and detecting 0.55 against 0.50 would need about 783 independent calls.
-- **The harness detects a signal that exists, under a known generator.** In a pre-registered control on synthetic prices, the deployed calibrated ensemble scores balanced accuracy 0.531 and 0.565 at the two non-zero signal strengths, both above 0.50 after a Holm adjustment, and stays within 0.03 of chance at zero signal. An oracle that knows the true conditional mean is 0.104 and 0.145 ahead.
+- **The harness detects a signal that exists, under a known generator.** In a pre-registered control on synthetic prices, the deployed calibrated ensemble scores balanced accuracy 0.530 and 0.565 at the two non-zero signal strengths, both above 0.50 after a Holm adjustment, and stays within 0.03 of chance at zero signal. A rule that thresholds the true conditional mean is 0.104 and 0.145 ahead.
 - **The ML gate barely separates signal from noise.** In that control it passed in 4 of 46 seeds with no signal and 11 of 46 at the strongest, a descriptive count and not a tested endpoint; a conformal gate is the next candidate, to be tested against matched-coverage selection.
 
 <p align="center"><img src="docs/img/detection_curve.svg" alt="Model and oracle balanced accuracy against injected signal strength, with the analytic ceiling and the 0.50 chance line" width="680"></p>
@@ -113,15 +113,15 @@ The first run failed as a design and stays on record in `docs/data/detection_cur
 
 ### Version 3, pre-registered
 
-Version 3 scores the deployed calibrated ensemble on 46 fresh seeds per strength. Its specification, `docs/prereg/control-v3.md`, was published and hashed in [issue 1](https://github.com/AdiMendelowitz/agentic-equity-research/issues/1) before the run; the seed count comes from a power calculation for a margin of 0.03.
+Version 3 scores the deployed calibrated ensemble on 46 fresh seeds per strength. Its specification, `docs/prereg/control-v3.md`, was released in a public commit and hashed in [issue 1](https://github.com/AdiMendelowitz/agentic-equity-research/issues/1) before the first public commit of the results; the seed count comes from a power calculation for a margin of 0.03.
 
 | Signal strength s | Model balanced accuracy | Pre-registered test | Verdict | Gate passed |
 | --- | --- | --- | --- | --- |
-| 0.0 | 0.516 | 90% interval 0.510 to 0.522 inside 0.47 to 0.53 | equivalent to chance: met | 4 of 46 seeds |
-| 0.3 | 0.531 | lower bound 0.519, Holm-adjusted p below 0.001 | above chance: met | 5 of 46 seeds |
+| 0.0 | 0.516 | 90% interval 0.510 to 0.522 inside 0.47 to 0.53 | within the 0.03 margin of chance: met | 4 of 46 seeds |
+| 0.3 | 0.530 | lower bound 0.519, Holm-adjusted p below 0.001 | above chance: met | 5 of 46 seeds |
 | 0.6 | 0.565 | lower bound 0.547, Holm-adjusted p below 0.001 | above chance: met | 11 of 46 seeds |
 
-The oracle stays 0.104 and 0.145 ahead at s = 0.3 and 0.6. At zero signal the interval sits inside the margin but above 0.50. An exploratory rerun on 300 further seeds, reported with its figures on the report page, attributes most of that excess to the per-seed statistic and leaves one control result unexplained. The command is `uv run python docs/report/run_control_v3.py`.
+The oracle stays 0.104 and 0.145 ahead at s = 0.3 and 0.6. At zero signal the interval sits inside the margin but above 0.50. Being within the margin is not evidence that the mean equals 0.50. An exploratory rerun on 300 further seeds, reported with its figures on the report page, is consistent with the excess being a finite-window property of the per-seed statistic, does not identify its cause, and has one control interval that misses its expected value. The command is `uv run python docs/report/run_control_v3.py`.
 
 ## What the tests check
 
@@ -136,10 +136,12 @@ The oracle stays 0.104 and 0.145 ahead at s = 0.3 and 0.6. At zero signal the in
 
 - No real evaluation observation is published at row level, and the evaluation aggregates carry no ticker, week or date dimension. Synthetic control rows and run dates are published.
 - Up to v0.1.2 the ML layer had three leakage defects, fixed in v0.1.3 with a test each. The calibration block followed the training block with no purge gap. The logged Brier score was computed on rows the model was fitted on. The Brier check scored the calibrated ensemble on the rows its calibrator was fitted on. Calibration is now fitted on out-of-fold predictions, and a purged holdout block is used only for evaluation.
-- Control version 2 measures one uncalibrated classifier per seed, not the deployed ensemble; version 3 measures the ensemble. In version 3 the model scores slightly above 0.50 on pure noise, within the pre-registered margin; the exploratory analysis bounds any real dependence below 0.01 but does not fully explain it.
+- Control version 2 measures one uncalibrated classifier per seed, not the deployed ensemble; version 3 measures the ensemble. In version 3 the model scores slightly above 0.50 on pure noise, within the pre-registered margin. In the exploratory analysis the pooled balanced accuracy is at most 0.009 above 0.50 at the upper end of its 95% interval; that bounds this statistic, not every form of dependence, and the cause is not identified.
 - Samples are small, with 707 resolved calls and 145 resolved ML predictions.
+- Only the LightGBM member of the ensemble is Platt-calibrated, the logged out-of-fold Brier score belongs to the model chosen on the same folds, and the version 3 seed count was planned from version 2 variability, which the strongest signal slightly exceeded.
+- The control's oracle thresholds the true conditional mean at the cost and is not the rule that maximises balanced accuracy; the analytic ceiling is for the zero-cost sign problem.
 - The control experiment uses one synthetic signal family; it shows the harness can find that signal, not that real prices carry one.
-- The control's expectations were fixed before its results in the private development history; each release here is a single commit, so that order cannot be checked from this repository. That applies to versions 1 and 2. From version 3 each specification's hash is published in a public issue before its run.
+- The control's expectations were fixed before its results in the private development history; each release here is a single commit, so that order cannot be checked from this repository. That applies to versions 1 and 2. From version 3 the specification is released in a public commit, and its hash posted in a public issue, before the first public commit of the results. The hashes for version 3 cover three files; the code they import is fixed by the release commit, and the start of the run is recorded only in a local log.
 - Briefs are scored against a five-day move, while the underlying thesis spans weeks to months.
 - The published aggregates were not re-scored with the HOLD rule, which was defined after they were seen.
 - `numba` is overridden in `pyproject.toml` so that `pandas-ta` resolves on Python 3.14.

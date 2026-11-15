@@ -316,7 +316,7 @@ def _cells_v3() -> list[CellV3]:
 def _verdict_text(zero_signal: bool, verdict: bool | None) -> str:
     if verdict is None:
         return "not evaluated"
-    claim = "equivalent to chance" if zero_signal else "above chance"
+    claim = "within the margin of chance" if zero_signal else "above chance"
     return f"{claim}: met" if verdict else "not met"
 
 
@@ -477,7 +477,8 @@ def test_exploratory_section_reports_an_interval_that_contains_chance(
     text = build_report.exploratory_section()
     assert "contains 0.50" in text
     assert "excludes 0.50" not in text
-    assert "below 0.007" in text
+    assert "0.007 above 0.50" in text
+    assert "does not identify the cause" in text
     assert "not pre-registered" in text
 
 

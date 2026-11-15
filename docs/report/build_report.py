@@ -360,7 +360,7 @@ def _primary_row(signal: float, result: dict[str, Any]) -> str:
         bound = "n/a" if eq["lower"] is None else f"{pct} interval {_range(eq['lower'], eq['upper'])}"
         extra = f"{eq['margin_low']:.3f} to {eq['margin_high']:.3f}"
         n, mean = eq["n"], eq["mean"]
-        verdict = _verdict_label(eq["verdict"], "equivalent to chance")
+        verdict = _verdict_label(eq["verdict"], "within the margin of chance")
     else:
         row = result["superiority"][signal]
         bound = "n/a" if row["lower_bound"] is None else f"lower bound {row['lower_bound']:.3f}"
@@ -402,16 +402,27 @@ def control_v3_section() -> str:
     delta, alpha = result["delta"], result["alpha"]
     pct = f"{result['equivalence_zero_signal']['interval_confidence'] * 100:.0f}%"
     gap_confidence = next((g["interval_confidence"] for g in result["paired_gap"].values()), 1 - alpha)
+    cells = read_cells_v3()
+    at_chance = sum(1 for c in cells if c.model_balanced_accuracy == CHANCE)
     return (
         '<section id="control-v3"><h2>Control experiment, version 3 (pre-registered)</h2>'
-        "<p>This control scores the deployed calibrated ensemble on seeds disjoint from version 2. The "
-        "specification (<code>docs/prereg/control-v3.md</code>) was published, and its sha256 posted in public "
-        f"issue 1 of the repository, before the run. The run used {_seed_count_text(result)}. At zero signal "
-        f"the endpoint is equivalence to chance: the {pct} interval must lie inside 0.50 plus or minus "
+        "<p>This control scores the deployed ensemble on seeds disjoint from version 2. The specification "
+        "(<code>docs/prereg/control-v3.md</code>) was released in a public commit holding the whole code tree, "
+        "and the sha256 of the specification and its two analysis files was posted in public issue 1, before "
+        "the first public commit of the results. The hashes cover those three files only; the generator, "
+        "features, model code and split they import are fixed by that release commit, not by the hashes. "
+        f"The run used {_seed_count_text(result)}. At zero signal "
+        f"the endpoint is equivalence within a margin: the {pct} interval must lie inside 0.50 plus or minus "
         f"{delta:g} (alpha {alpha:g} for each one-sided test). At each non-zero signal the endpoint is a mean "
         f"above 0.50, tested one-sided at alpha {alpha:g} after a Holm adjustment across the non-zero "
         "signals. Every verdict below is returned by the pre-registered analysis code and none is "
-        "recomputed on this page.</p>"
+        "recomputed on this page. A verdict of within the margin is not evidence that the mean equals 0.50, "
+        "and it is not a leakage test.</p>"
+        f"<p>{at_chance} of {len(cells)} cells score exactly 0.500, which is what a prediction of a single "
+        "class scores. Such cells pull each mean towards 0.50 and narrow the zero-signal interval, so the "
+        "results describe the thresholded system as deployed. The oracle thresholds the true conditional "
+        "mean at the cost; it is not the rule that maximises balanced accuracy, and the analytic ceiling is "
+        "for the zero-cost sign problem, so the gaps are descriptive.</p>"
         '<table id="control-v3-primary"><caption>Pre-registered primary endpoints</caption>'
         '<thead><tr><th scope="col">Signal</th><th scope="col">Seeds</th><th scope="col">Mean</th>'
         '<th scope="col">Interval or one-sided lower bound</th>'
@@ -441,9 +452,10 @@ def exploratory_section() -> str:
     own_side = "above" if m["per_seed_own_mean"] > CHANCE else "not above"
     if m["pooled_own_low"] <= CHANCE <= m["pooled_own_high"]:
         own_verdict = (
-            "The pooled interval contains 0.50, so most of the per-seed excess is a property of the per-seed "
-            "statistic in a finite window; any dependence between predictions and their own labels is below "
-            f"{m['pooled_own_high'] - CHANCE:.3f}."
+            "The pooled interval contains 0.50. That is consistent with the per-seed excess being a "
+            "finite-window property of the per-seed statistic, and it does not identify the cause. The upper "
+            f"end of the pooled interval is {m['pooled_own_high'] - CHANCE:.3f} above 0.50; this bounds the "
+            "pooled balanced accuracy, not every form of dependence."
         )
     else:
         own_verdict = (
@@ -453,8 +465,8 @@ def exploratory_section() -> str:
     unrelated_verdict = ""
     if not (m["pooled_unrelated_low"] <= CHANCE <= m["pooled_unrelated_high"]):
         unrelated_verdict = (
-            " The unrelated-series pooled value should be 0.50 by construction and its interval excludes it; "
-            "this is unexplained and is reported as found."
+            " The unrelated-series pooled value has an expected value of 0.50 and its interval excludes 0.50 "
+            "in this sample; no cause is identified and it is reported as found."
         )
     return (
         '<section id="exploratory-zero-signal"><h2>Exploratory: the zero-signal excess</h2>'
@@ -595,7 +607,8 @@ def baselines_section() -> str:
         "<p>Calls on the same ticker overlap in their five-day windows and calls on the same day share the "
         "market move, so the independent count is lower than the nominal count. A design effect of d divides "
         "the effective count by d. The published data carry no ticker or date, so the effect cannot be "
-        "estimated here and the table shows the range.</p>"
+        "estimated here; the rows are assumed scenarios, not a measured range. The 0.50 line is also not "
+        "the no-skill rate for these calls, which the baseline bounds above describe.</p>"
         '<p class="source">Source: <code>docs/data/eval_recommendation.csv</code></p></section>'
     )
 
