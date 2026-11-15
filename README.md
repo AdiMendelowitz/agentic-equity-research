@@ -117,13 +117,14 @@ The first run failed as a design and stays on record in `docs/data/detection_cur
 - **Hermetic imports.** `tests/test_hermetic.py` imports every module with no network, database or credentials.
 - **Data gates.** `tests/test_gates.py` checks the published data schemas and keeps the demo package out of ML and evaluation code.
 - **Publication checks.** A redaction scan (`tools/redact_check.py`), a secrets scan (gitleaks) and a licence audit that fails on GPL and AGPL licence names in the locked environment run in CI.
-- **Not yet covered.** No test checks the boundary between the training and calibration blocks; see Limits.
+- **Leakage tests.** `tests/test_models_fixes.py` checks the purge gap before the holdout block, that no holdout row reaches any fit, and that the logged Brier score is out of fold.
 - **Versions.** CI runs the test suite and a blocking offline demo on Python 3.12, 3.13 and 3.14.
 
 ## Limits
 
 - No real evaluation observation is published at row level, and the evaluation aggregates carry no ticker, week or date dimension. Synthetic control rows and run dates are published.
-- Two known defects in the ML layer, fixed in the next release: the calibration block directly follows the training block with no purge gap, so five-day labels overlap at the boundary; and the logged Brier score is computed on rows the model was fitted on, so it is not out of sample.
+- Up to v0.1.2 the ML layer had three leakage defects, fixed in v0.1.3 with a test each. The calibration block followed the training block with no purge gap. The logged Brier score was computed on rows the model was fitted on. The Brier check scored the calibrated ensemble on the rows its calibrator was fitted on. Calibration is now fitted on out-of-fold predictions, and a purged holdout block is used only for evaluation.
+- The published control (version 2) measures one uncalibrated classifier per seed, not the deployed ensemble. Version 3, pre-registered in `docs/prereg/control-v3.md` before its run, scores the deployed calibrated ensemble on fresh seeds.
 - Samples are small, with 707 resolved calls and 145 resolved ML predictions.
 - The control experiment uses one synthetic signal family; it shows the harness can find that signal, not that real prices carry one.
 - The control's expectations were fixed before its results in the private development history; each release here is a single commit, so that order cannot be checked from this repository. From v0.2 each specification's hash is published in a public issue before its run.
@@ -137,7 +138,7 @@ The first run failed as a design and stays on record in `docs/data/detection_cur
 Planned next:
 
 - A static results report on GitHub Pages with per-seed control results, a sample-accounting diagram for the live evaluation, and simple baselines.
-- A purge gap before the calibration block, out-of-fold Brier scores, and the control run on the deployed calibrated ensemble.
+- Control version 3 on the deployed calibrated ensemble, run at the seed count its power calculation sets, scored only against its pre-registered rules.
 - A fresh zero-signal run through the complete pipeline, and an oracle check with the same target and threshold as the analytic ceiling.
 - Dependence-aware intervals for the live evaluation, with the method published.
 - A conformal gate tested against matched-coverage selection, and a single-agent against multi-agent comparison.

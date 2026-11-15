@@ -29,6 +29,20 @@ def _synthetic_df(n: int = 800) -> pd.DataFrame:
     )
 
 
+def _with_fixed_f1(scores):
+    """Wrap the real fold loop and overwrite only the per-fold F1 scores, so the gate outcome is controlled."""
+    import dataclasses
+
+    from aer.ml import models as ml_models
+
+    real = ml_models._cross_validate
+
+    def _wrapped(pipe, X, y, splits):
+        return dataclasses.replace(real(pipe, X, y, splits), f1_scores=np.array(scores))
+
+    return _wrapped
+
+
 def test_build_feature_matrix_shape():
     from aer.ml.features import build_feature_matrix
 
@@ -152,8 +166,7 @@ def test_high_std_returns_skipped():
 
         feature_df = build_feature_matrix("AAPL")
 
-    with patch("aer.ml.models.cross_val_score") as mock_cv:
-        mock_cv.return_value = np.array([0.3, 0.7, 0.2, 0.8, 0.1])  # std ≈ 0.26 > 0.15
+    with patch("aer.ml.models._cross_validate", _with_fixed_f1([0.3, 0.7, 0.2, 0.8, 0.1])):  # std ≈ 0.26 > 0.15
         result = train_and_predict(feature_df, "AAPL")
     assert result is not None
     assert result[0].prediction_skipped is True
@@ -214,8 +227,8 @@ def test_brier_score_stored():
         assert 0.0 <= result[0].brier_score_raw <= 1.0
 
 
-def test_brier_score_uses_last_cv_fold_not_calib():
-    """Brier score must NOT be computed on X_calib (reserved for calibration)."""
+def test_brier_score_is_out_of_fold():
+    """The stored Brier score is pooled out of fold; no fitted-on-all-of-CV model scores its own training rows."""
     from aer.ml.features import build_feature_matrix
     from aer.ml.models import train_and_predict
 
@@ -272,10 +285,10 @@ def test_brier_score_logged(caplog):
     df = _synthetic_df(900)
     with patch("aer.ml.features.get_price_history_raw", return_value=df):
         feature_df = build_feature_matrix("AAPL")
-    # Mock cross_val_score to return scores above CV_F1_MEAN_MINIMUM (0.52) so model is not skipped
+    # Fix the fold F1 scores above CV_F1_MEAN_MINIMUM (0.52) so model is not skipped
     with (
         caplog.at_level(logging.INFO, logger="aer.ml.models"),
-        patch("aer.ml.models.cross_val_score", return_value=np.array([0.55, 0.56, 0.54, 0.57, 0.55])),
+        patch("aer.ml.models._cross_validate", _with_fixed_f1([0.55, 0.56, 0.54, 0.57, 0.55])),
     ):
         train_and_predict(feature_df, "AAPL")
     assert any("Brier check |" in record.message for record in caplog.records)

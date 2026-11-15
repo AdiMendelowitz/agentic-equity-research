@@ -280,7 +280,7 @@ class MLPrediction(BaseModel):
     trained_on_bars: int | None = None
     n_features: int | None = None
     class_balance_up: float | None = None
-    brier_score_raw: float | None = None  # evaluated on last CV fold test set
+    brier_score_raw: float | None = None  # pooled out of fold over the CV test rows of the selected model
     agrees_with_llm: bool | None = None
     prediction_skipped: bool = False
     backtest_signal: str | None = None  # reserved for arbitration

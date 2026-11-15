@@ -2,7 +2,14 @@
 
 Design notes:
 - class_weight="balanced" on logistic; is_unbalance=True on LightGBM
-- Brier score on last CV fold test set - X_calib is untouched (reserved for calibration)
+- Labelled rows in time order: CV block | PURGE_GAP_BARS dropped rows | holdout block. Labels look
+  PREDICTION_HORIZON_DAYS bars ahead, so the dropped rows stop CV labels overlapping the holdout.
+- One manual TimeSeriesSplit loop over the CV block records per-fold macro F1 and the out-of-fold probabilities
+  of both models. The reported Brier score is out of fold, pooled over every CV test row of the selected model.
+- The Platt calibrator is fitted on the pooled out-of-fold LightGBM probabilities (cross-fitted). The holdout
+  block is never used to fit anything; it only scores the Brier check (LightGBM, logistic, ensemble).
+- fit_ensemble returns a reusable FittedEnsemble (both final models refitted on the whole CV block, whether or
+  not the gate passes); train_and_predict is built on top of it.
 - Combined skip: mean_f1 < CV_F1_MEAN_MINIMUM OR cv_f1_std > CV_F1_STD_HARD_LIMIT
 - model_used="none" when prediction_skipped=True
 """
@@ -11,6 +18,7 @@ import logging
 import os
 import sys
 import threading
+from dataclasses import dataclass, replace
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -18,9 +26,10 @@ from typing import Any
 import joblib
 import numpy as np
 import pandas as pd
+from sklearn.base import clone
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import brier_score_loss
-from sklearn.model_selection import TimeSeriesSplit, cross_val_score
+from sklearn.metrics import brier_score_loss, f1_score
+from sklearn.model_selection import TimeSeriesSplit
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
@@ -42,11 +51,14 @@ from aer.ml.constants import (
     PURGE_GAP_BARS,
     SEED,
 )
+from aer.ml.ensemble import _SC
 from aer.models import MLPrediction, _utcnow
 
 logger = logging.getLogger(__name__)
 
 _MODEL_WRITE_LOCK = threading.Lock()
+
+HOLDOUT_FRACTION: float = 0.15
 
 
 def _make_lgbm() -> Any:
@@ -152,60 +164,207 @@ def _cleanup_old_models(ticker: str) -> None:
             pass
 
 
+@dataclass(frozen=True)
+class FittedEnsemble:
+    """Both final pipelines, the cross-fitted Platt calibrator and the diagnostics of one fit.
+
+    Both pipelines are refitted on the whole CV block. The holdout block never touches a fit.
+    """
+
+    features: tuple[str, ...]
+    lgbm: Pipeline
+    logistic: Pipeline
+    calibrator: Any | None
+    cv_f1_lgbm: float
+    cv_f1_logistic: float
+    cv_f1_std_lgbm: float
+    cv_f1_std_logistic: float
+    model_used: str
+    gate_passed: bool
+    oof_brier: float | None
+    holdout_brier: dict[str, float] | None
+    trained_on_bars: int
+    up_rate: float
+
+    @property
+    def weight_lgbm(self) -> float:
+        total = self.cv_f1_lgbm + self.cv_f1_logistic
+        return self.cv_f1_lgbm / total if total > 0 else 0.5
+
+    def predict_proba_up(self, X: pd.DataFrame) -> np.ndarray:
+        """F1-weighted soft vote of the calibrated LightGBM and the logistic probabilities of the up class."""
+        frame = X[list(self.features)]
+        lgbm_prob = self.lgbm.predict_proba(frame)[:, 1]
+        if self.calibrator is not None:
+            lgbm_prob = np.asarray(self.calibrator.predict(lgbm_prob), dtype=float)
+        logistic_prob = self.logistic.predict_proba(frame)[:, 1]
+        weight = self.weight_lgbm
+        return weight * lgbm_prob + (1.0 - weight) * logistic_prob
+
+
+@dataclass(frozen=True)
+class _CvResult:
+    f1_scores: np.ndarray
+    oof_index: np.ndarray
+    oof_probs: np.ndarray
+
+
+def _split_cv_holdout(n_rows: int) -> tuple[slice, slice]:
+    """Positional slices of the CV block and the holdout block, with PURGE_GAP_BARS rows dropped between them."""
+    n_holdout = int(n_rows * HOLDOUT_FRACTION)
+    holdout_start = n_rows - n_holdout
+    cv_stop = max(holdout_start - PURGE_GAP_BARS, 0)
+    return slice(0, cv_stop), slice(holdout_start, n_rows)
+
+
+def _make_pipeline(estimator: Any) -> Pipeline:
+    return Pipeline([("scaler", StandardScaler()), ("clf", estimator)]).set_output(transform="pandas")
+
+
+def _cross_validate(
+    pipe: Pipeline,
+    X: pd.DataFrame,
+    y: np.ndarray,
+    splits: list[tuple[np.ndarray, np.ndarray]],
+) -> _CvResult:
+    """Fit a clone of pipe per fold; return macro F1 per fold and the pooled out-of-fold up probabilities."""
+    f1_scores: list[float] = []
+    oof_index: list[np.ndarray] = []
+    oof_probs: list[np.ndarray] = []
+    for train_idx, test_idx in splits:
+        fold_pipe = clone(pipe).set_output(transform="pandas")
+        fold_pipe.fit(X.iloc[train_idx], y[train_idx])
+        X_test = X.iloc[test_idx]
+        f1_scores.append(float(f1_score(y[test_idx], fold_pipe.predict(X_test), average="macro")))
+        oof_index.append(test_idx)
+        oof_probs.append(fold_pipe.predict_proba(X_test)[:, 1])
+    return _CvResult(np.asarray(f1_scores), np.concatenate(oof_index), np.concatenate(oof_probs))
+
+
+def _fit_platt_calibrator(probs: np.ndarray, y: np.ndarray) -> Any | None:
+    """Fit a Platt sigmoid on probabilities and true labels. Returns None when degenerate or on failure."""
+    if _SC is None:
+        logger.warning("_SigmoidCalibration unavailable (sklearn API changed); calibration skipped")
+        return None
+    if len(np.unique(y)) < 2:
+        logger.warning("Calibration set has only one class (degenerate); calibration skipped")
+        return None
+    try:
+        sc = _SC()
+        sc.fit(probs, y)
+        return sc
+    except Exception as exc:
+        logger.warning("Calibration fit failed (%s): %s", type(exc).__name__, exc)
+        return None
+
+
+def _holdout_brier(ens: FittedEnsemble, X_holdout: pd.DataFrame, y_holdout: np.ndarray) -> dict[str, float] | None:
+    if len(y_holdout) == 0:
+        return None
+    try:
+        frame = X_holdout[list(ens.features)]
+        return {
+            "lgbm": float(brier_score_loss(y_holdout, ens.lgbm.predict_proba(frame)[:, 1])),
+            "logistic": float(brier_score_loss(y_holdout, ens.logistic.predict_proba(frame)[:, 1])),
+            "ensemble": float(brier_score_loss(y_holdout, ens.predict_proba_up(X_holdout))),
+        }
+    except Exception as exc:
+        logger.warning("Holdout Brier check failed: %s", exc)
+        return None
+
+
+def fit_ensemble(feature_df: pd.DataFrame) -> FittedEnsemble | None:
+    """Cross-validate, calibrate on out-of-fold probabilities and refit both models on the CV block.
+
+    Returns None when fewer than MIN_TRAINING_BARS rows carry a label. Both final models are always fitted,
+    including when the gate fails, so that callers can score the model regardless of the gate. Writes no files.
+    """
+    features = tuple(c for c in FEATURE_COLS if c in feature_df.columns)
+    train_df = feature_df.dropna(subset=["label"])
+    if len(train_df) < MIN_TRAINING_BARS:
+        return None
+
+    X_all = train_df[list(features)]
+    y_all: np.ndarray = train_df["label"].to_numpy(dtype=int)
+    cv_slice, holdout_slice = _split_cv_holdout(len(X_all))
+    X_cv, y_cv = X_all.iloc[cv_slice], y_all[cv_slice]
+    X_holdout, y_holdout = X_all.iloc[holdout_slice], y_all[holdout_slice]
+
+    tscv = TimeSeriesSplit(n_splits=N_CV_SPLITS, gap=PURGE_GAP_BARS, test_size=CV_TEST_SIZE_BARS)
+    splits = list(tscv.split(X_cv))
+
+    logreg_pipe = _make_pipeline(_make_logistic())
+    lgbm_pipe = _make_pipeline(_make_lgbm())
+    logreg_cv = _cross_validate(logreg_pipe, X_cv, y_cv, splits)
+    lgbm_cv = _cross_validate(lgbm_pipe, X_cv, y_cv, splits)
+
+    # Model selection: higher mean F1 wins; tie → logistic (lighter, faster)
+    use_lgbm = lgbm_cv.f1_scores.mean() > logreg_cv.f1_scores.mean()
+    model_used = "lightgbm" if use_lgbm else "logistic"
+    best_cv = lgbm_cv if use_lgbm else logreg_cv
+    best_mean = float(best_cv.f1_scores.mean())
+    best_std = float(best_cv.f1_scores.std())
+    gate_passed = not (best_mean < CV_F1_MEAN_MINIMUM or best_std > CV_F1_STD_HARD_LIMIT)
+
+    oof_brier: float | None = None
+    if len(best_cv.oof_index) > 0:
+        oof_brier = float(brier_score_loss(y_cv[best_cv.oof_index], best_cv.oof_probs))
+
+    calibrator = _fit_platt_calibrator(lgbm_cv.oof_probs, y_cv[lgbm_cv.oof_index])
+
+    logreg_pipe.fit(X_cv, y_cv)
+    lgbm_pipe.fit(X_cv, y_cv)
+
+    ens = FittedEnsemble(
+        features=features,
+        lgbm=lgbm_pipe,
+        logistic=logreg_pipe,
+        calibrator=calibrator,
+        cv_f1_lgbm=float(lgbm_cv.f1_scores.mean()),
+        cv_f1_logistic=float(logreg_cv.f1_scores.mean()),
+        cv_f1_std_lgbm=float(lgbm_cv.f1_scores.std()),
+        cv_f1_std_logistic=float(logreg_cv.f1_scores.std()),
+        model_used=model_used,
+        gate_passed=gate_passed,
+        oof_brier=oof_brier,
+        holdout_brier=None,
+        trained_on_bars=len(X_cv),
+        up_rate=float(y_cv.mean()),
+    )
+    return replace(ens, holdout_brier=_holdout_brier(ens, X_holdout, y_holdout))
+
+
 def train_and_predict(feature_df: pd.DataFrame, ticker: str) -> tuple["MLPrediction", "MLPrediction"] | None:
-    """Train logistic + LightGBM on historical labeled data; return prediction for latest bar.
+    """Train logistic + LightGBM on historical labelled data; return prediction for latest bar.
 
     Returns (lgbm_ml, logistic_ml) tuple - both MLPrediction objects for ensemble use.
     feature_df: output of build_feature_matrix() - may contain NaN in 'label' column
                 for the most recent bars (no forward return available yet).
+    The reported Brier score is out of fold; the Brier check is scored on a holdout block that no fit has seen.
     """
     available_features = [c for c in FEATURE_COLS if c in feature_df.columns]
-    train_df = feature_df.dropna(subset=["label"])
+    n_labelled = len(feature_df.dropna(subset=["label"]))
 
-    if len(train_df) < MIN_TRAINING_BARS:
-        logger.warning("%s: only %d labeled rows — skipping ML prediction", ticker, len(train_df))
+    ens = fit_ensemble(feature_df)
+    if ens is None:
+        logger.warning("%s: only %d labeled rows — skipping ML prediction", ticker, n_labelled)
         _skipped = MLPrediction(
             ticker=ticker,
             prediction_skipped=True,
             model_used="none",
-            trained_on_bars=len(train_df),
+            trained_on_bars=n_labelled,
             n_features=len(available_features),
         )
         return _skipped, _skipped
 
-    X_all = train_df[available_features]
-    y_all = train_df["label"].values.astype(int)
-
-    # Reserve 15% calibration set for Platt calibration
-    n_calib = int(len(X_all) * 0.15)
-    X_cv, y_cv = X_all.iloc[:-n_calib], y_all[:-n_calib]
-    X_calib = X_all.iloc[-n_calib:]
-    y_calib = y_all[-n_calib:]
-
-    up_rate = float(y_cv.mean())
-    tscv = TimeSeriesSplit(n_splits=N_CV_SPLITS, gap=PURGE_GAP_BARS, test_size=CV_TEST_SIZE_BARS)
-
-    logreg_pipe = Pipeline([("scaler", StandardScaler()), ("clf", _make_logistic())]).set_output(transform="pandas")
-    lgbm_pipe = Pipeline([("scaler", StandardScaler()), ("clf", _make_lgbm())]).set_output(transform="pandas")
-
-    logreg_scores = cross_val_score(logreg_pipe, X_cv, y_cv, cv=tscv, scoring="f1_macro")
-    lgbm_scores = cross_val_score(lgbm_pipe, X_cv, y_cv, cv=tscv, scoring="f1_macro")
-
-    # Model selection: higher mean F1 wins; tie → logistic (lighter, faster)
-    if lgbm_scores.mean() > logreg_scores.mean():
-        best_pipe = lgbm_pipe
-        model_used = "lightgbm"
-        best_scores = lgbm_scores
-    else:
-        best_pipe = logreg_pipe
-        model_used = "logistic"
-        best_scores = logreg_scores
-
-    mean_f1 = float(best_scores.mean())
-    std_f1 = float(best_scores.std())
+    model_used = ens.model_used
+    mean_f1 = ens.cv_f1_lgbm if model_used == "lightgbm" else ens.cv_f1_logistic
+    std_f1 = ens.cv_f1_std_lgbm if model_used == "lightgbm" else ens.cv_f1_std_logistic
+    up_rate = ens.up_rate
+    n_bars = ens.trained_on_bars
 
     # Combined skip criterion: mean too low OR std too high
-    if mean_f1 < CV_F1_MEAN_MINIMUM or std_f1 > CV_F1_STD_HARD_LIMIT:
+    if not ens.gate_passed:
         logger.info(
             "%s: prediction skipped — mean_f1=%.3f (min %.2f), std_f1=%.3f (max %.2f)",
             ticker,
@@ -221,19 +380,15 @@ def train_and_predict(feature_df: pd.DataFrame, ticker: str) -> tuple["MLPredict
             cv_f1_macro=mean_f1,
             cv_f1_std=std_f1,
             class_balance_up=up_rate,
-            trained_on_bars=len(X_cv),
+            trained_on_bars=n_bars,
             n_features=len(available_features),
         )
         return _skipped, _skipped
 
-    # Fit BOTH pipelines - ensemble requires both to predict on X_pred
-    logreg_pipe.fit(X_cv, y_cv)
-    lgbm_pipe.fit(X_cv, y_cv)
-
-    # Platt calibration on LightGBM
-    from aer.ml.ensemble import _fit_sigmoid_calibrator  # local import - after skip check
-
-    calibrator = _fit_sigmoid_calibrator(lgbm_pipe, X_calib, y_calib)
+    lgbm_pipe = ens.lgbm
+    logreg_pipe = ens.logistic
+    best_pipe = lgbm_pipe if model_used == "lightgbm" else logreg_pipe
+    calibrator = ens.calibrator
 
     # Predict on the latest available bar (last row of feature_df regardless of label)
     X_pred = feature_df[available_features].iloc[[-1]]
@@ -252,27 +407,13 @@ def train_and_predict(feature_df: pd.DataFrame, ticker: str) -> tuple["MLPredict
         except Exception as _calib_exc:
             logger.warning("Calibrator predict failed for %s: %s", ticker, _calib_exc)
 
-    # Brier score on last CV fold test set - NOT on X_calib
-    brier_score_raw: float | None = None
-    last_fold = list(tscv.split(X_cv))[-1]
-    X_last_test = X_cv.iloc[last_fold[1]]
-    y_last_test = y_cv[last_fold[1]]
-    if len(X_last_test) > 0:
-        last_probs = best_pipe.predict_proba(X_last_test)[:, 1]
-        brier_score_raw = float(brier_score_loss(y_last_test, last_probs))
+    brier_score_raw = ens.oof_brier
 
-    # Verification: ensemble Brier score vs individual models on X_calib
-    try:
-        lgbm_probs_calib = lgbm_pipe.predict_proba(X_calib)[:, 1]
-        logreg_probs_calib = logreg_pipe.predict_proba(X_calib)[:, 1]
-        calibrated_probs_calib = calibrator.predict(lgbm_probs_calib) if calibrator is not None else lgbm_probs_calib
-        _f1_sum = float(lgbm_scores.mean()) + float(logreg_scores.mean())
-        _w_lgbm = float(lgbm_scores.mean()) / _f1_sum if _f1_sum > 0 else 0.5
-        _w_logistic = 1.0 - _w_lgbm
-        ensemble_probs_calib = _w_lgbm * calibrated_probs_calib + _w_logistic * logreg_probs_calib
-        brier_lgbm = float(brier_score_loss(y_calib, lgbm_probs_calib))
-        brier_logistic = float(brier_score_loss(y_calib, logreg_probs_calib))
-        brier_ensemble = float(brier_score_loss(y_calib, ensemble_probs_calib))
+    # Verification on the holdout block: no fit, including the calibrator, has seen these rows
+    if ens.holdout_brier is not None:
+        brier_lgbm = ens.holdout_brier["lgbm"]
+        brier_logistic = ens.holdout_brier["logistic"]
+        brier_ensemble = ens.holdout_brier["ensemble"]
         brier_check_passed = brier_ensemble < min(brier_lgbm, brier_logistic)
         logger.info(
             "Brier check | %s | brier_lgbm=%.4f brier_logistic=%.4f brier_ensemble=%.4f passed=%s",
@@ -282,8 +423,8 @@ def train_and_predict(feature_df: pd.DataFrame, ticker: str) -> tuple["MLPredict
             brier_ensemble,
             brier_check_passed,
         )
-    except Exception as _brier_exc:
-        logger.warning("Brier check failed for %s: %s", ticker, _brier_exc)
+    else:
+        logger.warning("Brier check unavailable for %s", ticker)
 
     # Persist model with calibrator key (backward-compatible; None if calibration failed)
     today_str = date.today().isoformat()
@@ -303,7 +444,7 @@ def train_and_predict(feature_df: pd.DataFrame, ticker: str) -> tuple["MLPredict
         std_f1,
         "UP" if lgbm_prob_up_raw >= 0.5 else "DOWN",
         lgbm_prob_up_raw,
-        len(X_cv),
+        n_bars,
     )
 
     # Build per-model MLPrediction objects for ensemble
@@ -312,10 +453,10 @@ def train_and_predict(feature_df: pd.DataFrame, ticker: str) -> tuple["MLPredict
         direction="UP" if lgbm_prob_up_raw >= 0.5 else "DOWN",
         prob_up_raw=lgbm_prob_up_raw,
         calibrated_prob_up=calibrated_prob_up,
-        cv_f1_macro=float(lgbm_scores.mean()),
-        cv_f1_std=float(lgbm_scores.std()),
+        cv_f1_macro=ens.cv_f1_lgbm,
+        cv_f1_std=ens.cv_f1_std_lgbm,
         model_used="lightgbm",
-        trained_on_bars=len(X_cv),
+        trained_on_bars=n_bars,
         n_features=len(available_features),
         class_balance_up=up_rate,
         brier_score_raw=brier_score_raw if model_used == "lightgbm" else None,
@@ -325,10 +466,10 @@ def train_and_predict(feature_df: pd.DataFrame, ticker: str) -> tuple["MLPredict
         ticker=ticker,
         direction="UP" if logreg_prob_up_raw >= 0.5 else "DOWN",
         prob_up_raw=logreg_prob_up_raw,
-        cv_f1_macro=float(logreg_scores.mean()),
-        cv_f1_std=float(logreg_scores.std()),
+        cv_f1_macro=ens.cv_f1_logistic,
+        cv_f1_std=ens.cv_f1_std_logistic,
         model_used="logistic",
-        trained_on_bars=len(X_cv),
+        trained_on_bars=n_bars,
         n_features=len(available_features),
         class_balance_up=up_rate,
         brier_score_raw=brier_score_raw if model_used == "logistic" else None,
