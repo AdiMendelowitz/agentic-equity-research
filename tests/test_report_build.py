@@ -13,8 +13,16 @@ from types import ModuleType
 import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "src"))
+
+from aer.demo.control_v3 import CellV3, analyse  # noqa: E402
+
 DATA_DIR = ROOT / "docs" / "data"
 T_975_19 = 2.093024
+V3_HEADER = (
+    "signal,seed,gate_passed,model_used,cv_f1_mean,cv_f1_std,model_balanced_accuracy,"
+    "oracle_balanced_accuracy,holdout_brier_ensemble,majority_accuracy,label_base_rate,n_oos"
+)
 
 
 def _load() -> ModuleType:
@@ -272,3 +280,230 @@ def test_unexpected_gate_value_is_rejected() -> None:
                 "n_oos": "1",
             }
         )
+
+
+def _eval_rows() -> list[dict[str, str]]:
+    with (DATA_DIR / "eval_recommendation.csv").open(encoding="utf-8", newline="") as handle:
+        return list(csv.DictReader(handle))
+
+
+def _optional(value: str) -> float | None:
+    return float(value) if value.strip() else None
+
+
+def _cells_v3() -> list[CellV3]:
+    with (DATA_DIR / "detection_curve_v3.csv").open(encoding="utf-8", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    return [
+        CellV3(
+            signal=float(r["signal"]),
+            seed=int(r["seed"]),
+            gate_passed=r["gate_passed"] == "True",
+            model_used=r["model_used"] or None,
+            cv_f1_mean=_optional(r["cv_f1_mean"]),
+            cv_f1_std=_optional(r["cv_f1_std"]),
+            model_balanced_accuracy=_optional(r["model_balanced_accuracy"]),
+            oracle_balanced_accuracy=_optional(r["oracle_balanced_accuracy"]),
+            holdout_brier_ensemble=_optional(r["holdout_brier_ensemble"]),
+            majority_accuracy=float(r["majority_accuracy"]),
+            label_base_rate=float(r["label_base_rate"]),
+            n_oos=int(r["n_oos"]),
+        )
+        for r in rows
+    ]
+
+
+def _verdict_text(zero_signal: bool, verdict: bool | None) -> str:
+    if verdict is None:
+        return "not evaluated"
+    claim = "equivalent to chance" if zero_signal else "above chance"
+    return f"{claim}: met" if verdict else "not met"
+
+
+def _exploratory_csv(directory: Path, low: float, high: float) -> None:
+    metrics = {
+        "seeds": 40,
+        "first_seed": 2000,
+        "per_seed_own_mean": 0.5123,
+        "per_seed_own_se": 0.0041,
+        "per_seed_unrelated_mean": 0.5087,
+        "per_seed_unrelated_se": 0.0039,
+        "pooled_own": 0.5010,
+        "pooled_own_low": low,
+        "pooled_own_high": high,
+        "pooled_unrelated": 0.5000,
+        "pooled_unrelated_low": 0.4950,
+        "pooled_unrelated_high": 0.5050,
+        "single_class_cells": 3,
+        "follow_index": 1,
+    }
+    lines = ["metric,value"] + [f"{key},{value}" for key, value in metrics.items()]
+    (directory / "exploratory_zero_signal_v3.csv").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def test_wilson_interval_matches_hand_values() -> None:
+    mid = build_report.wilson_interval(50, 100)
+    assert mid.mean == pytest.approx(0.5)
+    assert mid.low == pytest.approx(0.4038, abs=5e-4)
+    assert mid.high == pytest.approx(0.5962, abs=5e-4)
+    edge = build_report.wilson_interval(0, 10)
+    assert edge.low == pytest.approx(0.0, abs=1e-12)
+    assert edge.high == pytest.approx(0.2775, abs=5e-4)
+
+
+def test_baseline_bounds_equal_independent_arithmetic_on_the_real_file() -> None:
+    by_rec = {r["recommendation"]: (int(r["n_resolved"]), int(r["n_synth_correct"])) for r in _eval_rows()}
+    buy_n, buy_ok = by_rec["BUY"]
+    sell_n = by_rec["SELL"][0] + by_rec["AVOID"][0]
+    sell_ok = by_rec["SELL"][1] + by_rec["AVOID"][1]
+    total = buy_n + sell_n
+    p_buy, p_sell = buy_n / total, sell_n / total
+    bounds = build_report.baseline_bounds(_eval_rows())
+    assert bounds["always_bearish"] == pytest.approx((sell_ok / total, (sell_ok + buy_n - buy_ok) / total))
+    assert bounds["always_bullish"] == pytest.approx((buy_ok / total, (buy_ok + sell_n - sell_ok) / total))
+    assert bounds["class_matched_random"] == pytest.approx(
+        (
+            p_buy * buy_ok / total + p_sell * sell_ok / total,
+            p_buy * (buy_ok + sell_n - sell_ok) / total + p_sell * (sell_ok + buy_n - buy_ok) / total,
+        )
+    )
+
+
+def test_baseline_bounds_match_the_committed_counts() -> None:
+    bounds = build_report.baseline_bounds(_eval_rows())
+    assert bounds["always_bearish"] == pytest.approx((228 / 707, 390 / 707))
+    assert bounds["always_bullish"] == pytest.approx((114 / 707, 317 / 707))
+
+
+def test_baseline_bounds_are_ordered_and_class_matched_lies_in_unit_interval() -> None:
+    bounds = build_report.baseline_bounds(_eval_rows())
+    assert set(bounds) == {"always_bearish", "always_bullish", "class_matched_random"}
+    for low, high in bounds.values():
+        assert low <= high
+    low, high = bounds["class_matched_random"]
+    assert 0.0 <= low <= high <= 1.0
+
+
+def test_design_effect_one_reproduces_the_plain_wilson_interval() -> None:
+    plain = build_report.wilson_interval(342, 707)
+    first = build_report.design_effect_rows(342, 707)[0]
+    assert first.effect == 1
+    assert first.interval.low == pytest.approx(plain.low, abs=1e-12)
+    assert first.interval.high == pytest.approx(plain.high, abs=1e-12)
+
+
+def test_design_effect_widens_the_interval_and_divides_the_count() -> None:
+    rows = build_report.design_effect_rows(342, 707)
+    assert [r.effect for r in rows] == [1, 2, 3, 5, 10]
+    widths = [r.interval.high - r.interval.low for r in rows]
+    assert all(a < b for a, b in zip(widths, widths[1:]))
+    for row in rows:
+        assert row.effective_n == pytest.approx(707 / row.effect)
+        assert row.contains_chance == (row.interval.low <= 0.5 <= row.interval.high)
+
+
+def test_baselines_table_shows_the_bounds_to_three_decimals(site: Path) -> None:
+    rows = _tables(site)["baselines"]
+    bounds = build_report.baseline_bounds(_eval_rows())
+    accuracy = f"{342 / 707:.3f}"
+    assert rows[0] == ["Recorded calls", accuracy, accuracy]
+    assert [row[0] for row in rows[1:]] == ["Always bearish", "Always bullish", "Class-matched random"]
+    for row, key in zip(rows[1:], ("always_bearish", "always_bullish", "class_matched_random"), strict=True):
+        assert row[1:] == [f"{bounds[key][0]:.3f}", f"{bounds[key][1]:.3f}"]
+    assert rows[1][1:] == [f"{228 / 707:.3f}", f"{390 / 707:.3f}"]
+    assert rows[2][1:] == [f"{114 / 707:.3f}", f"{317 / 707:.3f}"]
+
+
+def test_design_effect_table_has_one_row_per_effect(site: Path) -> None:
+    rows = _tables(site)["design-effect"]
+    assert len(rows) == len(build_report.DESIGN_EFFECTS)
+    for row, effect in zip(rows, build_report.DESIGN_EFFECTS, strict=True):
+        assert row[0] == f"{effect:g}"
+        assert row[1] == f"{707 / effect:.1f}"
+        assert row[3] in {"yes", "no"}
+
+
+def test_by_recommendation_table_follows_the_csv(site: Path) -> None:
+    rows = _tables(site)["by-recommendation"]
+    by_rec = {r["recommendation"]: r for r in _eval_rows()}
+    assert [row[0] for row in rows] == ["BUY", "SELL", "AVOID"]
+    for row in rows:
+        source = by_rec[row[0]]
+        resolved, correct = int(source["n_resolved"]), int(source["n_synth_correct"])
+        assert row[1] == f"{resolved:,}"
+        assert row[2] == f"{correct:,}"
+        assert row[3] == f"{correct / resolved:.3f}"
+
+
+def test_control_v3_primary_rows_follow_the_csv_and_the_preregistered_code(site: Path) -> None:
+    cells = _cells_v3()
+    result = analyse(cells)
+    signals = sorted({c.signal for c in cells})
+    rows = _tables(site)["control-v3-primary"]
+    assert [row[0] for row in rows] == [f"{s:.2f}" for s in signals]
+    for row, signal in zip(rows, signals, strict=True):
+        group = [c.model_balanced_accuracy for c in cells if c.signal == signal]
+        values = [v for v in group if v is not None]
+        endpoint = result["equivalence_zero_signal"] if signal == 0.0 else result["superiority"][signal]
+        verdict = endpoint["verdict"]
+        assert row[1] == str(len(values))
+        assert row[2] == f"{statistics.fmean(values):.3f}"
+        assert row[5] == _verdict_text(signal == 0.0, verdict)
+
+
+def test_control_v3_states_the_seed_count_per_signal(site: Path) -> None:
+    cells = _cells_v3()
+    counts = {sum(1 for c in cells if c.signal == s) for s in {c.signal for c in cells}}
+    assert len(counts) == 1
+    text = (site / "index.html").read_text(encoding="utf-8")
+    assert f"{counts.pop()} seeds per signal" in text
+    assert "Pre-registered primary endpoints" in text
+    assert len(_tables(site)["control-v3-secondary"]) == len({c.signal for c in cells})
+
+
+def test_control_v3_rejects_an_unexpected_gate_value(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    row = "0.000000,1000,true,logistic,0.4,0.1,0.5,0.5,0.3,0.55,0.45,255"
+    (tmp_path / "detection_curve_v3.csv").write_text(f"{V3_HEADER}\n{row}\n", encoding="utf-8")
+    monkeypatch.setattr(build_report, "DATA_DIR", tmp_path)
+    with pytest.raises(KeyError):
+        build_report.control_v3_section()
+
+
+def test_exploratory_section_reports_an_interval_that_contains_chance(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _exploratory_csv(tmp_path, low=0.4950, high=0.5070)
+    monkeypatch.setattr(build_report, "DATA_DIR", tmp_path)
+    text = build_report.exploratory_section()
+    assert "contains 0.50" in text
+    assert "excludes 0.50" not in text
+    assert "below 0.007" in text
+    assert "not pre-registered" in text
+
+
+def test_exploratory_section_reports_an_interval_that_excludes_chance(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _exploratory_csv(tmp_path, low=0.5020, high=0.5200)
+    monkeypatch.setattr(build_report, "DATA_DIR", tmp_path)
+    text = build_report.exploratory_section()
+    assert "excludes 0.50" in text
+    assert "contains 0.50" not in text
+    assert "3 of 40 cells" in text
+
+
+def test_exploratory_section_is_empty_when_the_file_is_absent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(build_report, "DATA_DIR", tmp_path)
+    assert build_report.exploratory_section() == ""
+
+
+def test_new_sections_keep_heading_levels_and_order(site: Path, page: _Page) -> None:
+    text = (site / "index.html").read_text(encoding="utf-8")
+    order = ["cohort", "evaluation-baselines", "control", "control-v3"]
+    if 'id="exploratory-zero-signal"' in text:
+        order.append("exploratory-zero-signal")
+    order += ["control-seeds", "figures"]
+    positions = [text.index(f'<section id="{name}"') for name in order]
+    assert positions == sorted(positions)
+    assert page.headings[0] == 1
+    assert all(b - a <= 1 for a, b in zip(page.headings, page.headings[1:]))

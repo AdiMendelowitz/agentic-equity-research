@@ -16,8 +16,8 @@
 ## Results at a glance
 
 - **No measurable edge on recorded output.** 342 of 707 resolved calls were correct (0.484, about 0.45 to 0.52), and detecting 0.55 against 0.50 would need about 783 independent calls.
-- **The harness detects a signal that exists, under a known generator.** On synthetic prices with an injected signal, a single classifier trained per seed has balanced accuracy above 0.50 at both non-zero strengths (0.531 and 0.574, against 0.621 and 0.702 for an oracle that knows the true conditional mean), and at zero signal its interval contains 0.50.
-- **The ML gate does not yet separate signal from noise.** It predicted in 4 of 20 seeds with no signal and 6 of 20 at the strongest; a conformal gate is the next candidate, to be tested against matched-coverage selection.
+- **The harness detects a signal that exists, under a known generator.** In a pre-registered control on synthetic prices, the deployed calibrated ensemble scores balanced accuracy 0.531 and 0.565 at the two non-zero signal strengths, both above 0.50 after a Holm adjustment, and stays within 0.03 of chance at zero signal. An oracle that knows the true conditional mean is 0.104 and 0.145 ahead.
+- **The ML gate barely separates signal from noise.** In that control it passed in 4 of 46 seeds with no signal and 11 of 46 at the strongest, a descriptive count and not a tested endpoint; a conformal gate is the next candidate, to be tested against matched-coverage selection.
 
 <p align="center"><img src="docs/img/detection_curve.svg" alt="Model and oracle balanced accuracy against injected signal strength, with the analytic ceiling and the 0.50 chance line" width="680"></p>
 
@@ -45,7 +45,7 @@ Brief: SYN4
   RSI: 33.56
   SMA50: 101.42
   Recent trend: FALLING
-  ML gate: predicted, calibrated probability of an up move 0.36
+  ML gate: predicted, calibrated probability of an up move 0.69
 
 Brief: SYN5
   Sessions: 700
@@ -54,9 +54,9 @@ Brief: SYN5
   SMA50: 88.66
   Recent trend: FALLING
   ML gate: abstained, cross-validation score below the gate threshold
-  Cross-validated macro F1: 0.48
+  Cross-validated macro F1: 0.50
 
-Tickers: 5, predicted: 1, elapsed seconds: 13.0
+Tickers: 5, predicted: 1, elapsed seconds: 13.5
 ```
 
 </details>
@@ -95,7 +95,7 @@ By conviction bin, the 0.6 bin scored 135 of 305 (0.443), the 0.7 bin 186 of 349
 
 ## Does the harness detect a signal that exists?
 
-A null result means little unless the harness can find a signal when one is there. The control injects a signal of strength s into synthetic prices (20 seeds per strength, 1,500 sessions each) and scores balanced accuracy, whose expected value without skill is 0.50 at any class balance. The model is one uncalibrated classifier per seed: the gate's cross-validation picks LightGBM or logistic regression, with logistic regression when the gate abstains. The deployed calibrated ensemble is not what this measures. Model figures cover all 20 seeds.
+A null result means little unless the harness can find a signal when one is there. The control, in its version 2, injects a signal of strength s into synthetic prices (20 seeds per strength, 1,500 sessions each) and scores balanced accuracy, whose expected value without skill is 0.50 at any class balance. The model is one uncalibrated classifier per seed: the gate's cross-validation picks LightGBM or logistic regression, with logistic regression when the gate abstains. The deployed calibrated ensemble is not what this measures. Model figures cover all 20 seeds.
 
 <p align="center"><img src="docs/diagrams/control-design.svg" alt="Control design: a known injected signal, one classifier per seed, compared with the oracle and the analytic ceiling" width="630"></p>
 
@@ -111,23 +111,35 @@ The negative control was met narrowly. At zero signal the upper bound of the int
 
 The first run failed as a design and stays on record in `docs/data/detection_curve_run1.csv`. Its injected signal fed back on itself, which turned the strongest setting into a runaway trend, and raw accuracy tracked the label base rate. Version 2 removed the feedback and switched to balanced accuracy. The command is `uv run python docs/report/run_control.py`.
 
+### Version 3, pre-registered
+
+Version 3 scores the deployed calibrated ensemble on 46 fresh seeds per strength. Its specification, `docs/prereg/control-v3.md`, was published and hashed in [issue 1](https://github.com/AdiMendelowitz/agentic-equity-research/issues/1) before the run; the seed count comes from a power calculation for a margin of 0.03.
+
+| Signal strength s | Model balanced accuracy | Pre-registered test | Verdict | Gate passed |
+| --- | --- | --- | --- | --- |
+| 0.0 | 0.516 | 90% interval 0.510 to 0.522 inside 0.47 to 0.53 | equivalent to chance: met | 4 of 46 seeds |
+| 0.3 | 0.531 | lower bound 0.519, Holm-adjusted p below 0.001 | above chance: met | 5 of 46 seeds |
+| 0.6 | 0.565 | lower bound 0.547, Holm-adjusted p below 0.001 | above chance: met | 11 of 46 seeds |
+
+The oracle stays 0.104 and 0.145 ahead at s = 0.3 and 0.6. At zero signal the interval sits inside the margin but above 0.50. An exploratory rerun on 300 further seeds, reported with its figures on the report page, attributes most of that excess to the per-seed statistic and leaves one control result unexplained. The command is `uv run python docs/report/run_control_v3.py`.
+
 ## What the tests check
 
-- **Leakage.** `tests/ml/test_leakage.py` covers label alignment, future-bar mutation and purge-gap geometry.
+- **Leakage.** `tests/ml/test_leakage.py` covers label alignment, future-bar mutation and purge-gap geometry. `tests/test_models_fixes.py` checks the purge gap before the holdout block, that no holdout row reaches any fit, and that the logged Brier score is out of fold.
 - **Hermetic imports.** `tests/test_hermetic.py` imports every module with no network, database or credentials.
 - **Data gates.** `tests/test_gates.py` checks the published data schemas and keeps the demo package out of ML and evaluation code.
 - **Publication checks.** A redaction scan (`tools/redact_check.py`), a secrets scan (gitleaks) and a licence audit that fails on GPL and AGPL licence names in the locked environment run in CI.
-- **Leakage tests.** `tests/test_models_fixes.py` checks the purge gap before the holdout block, that no holdout row reaches any fit, and that the logged Brier score is out of fold.
+- **Pre-registered analysis.** `tests/test_control_v3.py` pins the equivalence, Holm and paired-gap rules on hand-built cases and checks that the specification text states the same constants as the code.
 - **Versions.** CI runs the test suite and a blocking offline demo on Python 3.12, 3.13 and 3.14.
 
 ## Limits
 
 - No real evaluation observation is published at row level, and the evaluation aggregates carry no ticker, week or date dimension. Synthetic control rows and run dates are published.
 - Up to v0.1.2 the ML layer had three leakage defects, fixed in v0.1.3 with a test each. The calibration block followed the training block with no purge gap. The logged Brier score was computed on rows the model was fitted on. The Brier check scored the calibrated ensemble on the rows its calibrator was fitted on. Calibration is now fitted on out-of-fold predictions, and a purged holdout block is used only for evaluation.
-- The published control (version 2) measures one uncalibrated classifier per seed, not the deployed ensemble. Version 3, pre-registered in `docs/prereg/control-v3.md` before its run, scores the deployed calibrated ensemble on fresh seeds.
+- Control version 2 measures one uncalibrated classifier per seed, not the deployed ensemble; version 3 measures the ensemble. In version 3 the model scores slightly above 0.50 on pure noise, within the pre-registered margin; the exploratory analysis bounds any real dependence below 0.01 but does not fully explain it.
 - Samples are small, with 707 resolved calls and 145 resolved ML predictions.
 - The control experiment uses one synthetic signal family; it shows the harness can find that signal, not that real prices carry one.
-- The control's expectations were fixed before its results in the private development history; each release here is a single commit, so that order cannot be checked from this repository. From v0.2 each specification's hash is published in a public issue before its run.
+- The control's expectations were fixed before its results in the private development history; each release here is a single commit, so that order cannot be checked from this repository. That applies to versions 1 and 2. From version 3 each specification's hash is published in a public issue before its run.
 - Briefs are scored against a five-day move, while the underlying thesis spans weeks to months.
 - The published aggregates were not re-scored with the HOLD rule, which was defined after they were seen.
 - `numba` is overridden in `pyproject.toml` so that `pandas-ta` resolves on Python 3.14.
@@ -137,9 +149,9 @@ The first run failed as a design and stays on record in `docs/data/detection_cur
 
 Planned next:
 
-- A static results report on GitHub Pages with per-seed control results, a sample-accounting diagram for the live evaluation, and simple baselines.
-- Control version 3 on the deployed calibrated ensemble, run at the seed count its power calculation sets, scored only against its pre-registered rules.
-- A fresh zero-signal run through the complete pipeline, and an oracle check with the same target and threshold as the analytic ceiling.
+- The results report, built today by `docs/report/build_report.py`, published on GitHub Pages.
+- Exact baselines for the recorded calls, which need one further whole-sample aggregate of forward-return directions.
+- An oracle check with the same target and threshold as the analytic ceiling, and a cause for the unexplained control result in the exploratory zero-signal analysis.
 - Dependence-aware intervals for the live evaluation, with the method published.
 - A conformal gate tested against matched-coverage selection, and a single-agent against multi-agent comparison.
 - Indicators written in this repository in place of `pandas-ta`.

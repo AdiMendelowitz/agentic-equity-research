@@ -1,0 +1,15 @@
+metric,value
+seeds,300.0000
+first_seed,2000.0000
+per_seed_own_mean,0.5093
+per_seed_own_se,0.0021
+per_seed_unrelated_mean,0.4965
+per_seed_unrelated_se,0.0022
+pooled_own,0.5021
+pooled_own_low,0.4955
+pooled_own_high,0.5085
+pooled_unrelated,0.4920
+pooled_unrelated_low,0.4855
+pooled_unrelated_high,0.4983
+single_class_cells,56.0000
+follow_index,-0.0685
