@@ -181,22 +181,6 @@ def _run_news(state: BriefState) -> dict:
         return {"news": None}
 
 
-def _agent_signal_to_opinion_signal(
-    agent_output: AgentOutput,
-    agent_name: str,
-    brief: InvestmentBrief,
-) -> str:
-    """Derive opinion signal from agent output. Falls back to brief recommendation."""
-    # For most agents, use brief.recommendation (LLM synthesis)
-    # Exception: insider_buying has its own signal logic
-    if agent_name == "insider_buying" and hasattr(agent_output, "signal_label"):
-        # insider_buying uses signal_label: STRONG_BUY → BUY, BUY → BUY, WATCH → HOLD, NOISE → AVOID
-        signal_map = {"STRONG_BUY": "BUY", "BUY": "BUY", "WATCH": "HOLD", "NOISE": "AVOID"}
-        return signal_map.get(agent_output.signal_label, "HOLD")
-    # Default: use brief recommendation (LLM synthesis)
-    return brief.recommendation
-
-
 def _post_process(state: BriefState) -> dict:
     """Enrich the brief with price targets, factor loadings and walk-forward results.
 
@@ -235,50 +219,36 @@ def _post_process(state: BriefState) -> dict:
     except Exception as e:
         logger.warning("Walk-forward validation failed for %s: %s", brief.ticker, e)
 
-    # Record one opinion row per agent name below; a name with no output gets a neutral row
-    agents_to_record = [
+    # One opinion row per agent that produced output. The agents emit analysis and a confidence, not a
+    # directional call, so each row stores the synthesis recommendation beside that agent's confidence.
+    # A hit rate computed per agent from these rows therefore measures the synthesis, not the agent.
+    agents_to_record: list[tuple[str, AgentOutput | None]] = [
         ("fundamental", state.get("fundamental")),
         ("technical", state.get("technical")),
         ("sentiment", state.get("sentiment")),
         ("macro", state.get("macro")),
         ("positioning", state.get("positioning")),
-        ("insider_buying", state.get("insider_buying")),
-        ("pelosi", state.get("pelosi")),
     ]
 
     for agent_name, agent_output in agents_to_record:
         if agent_output is None:
-            # Record neutral opinion for absent agents (safety)
-            opinion = OpinionRecord(
-                ticker=brief.ticker,
-                agent_name=agent_name,
-                opinion_date=brief.date.date(),
-                signal="HOLD",
-                confidence=0.0,
-                conviction=0.0,
-                drivers=[],
-                forward_return_5d=None,
-            )
-        else:
-            # Extract signal from agent output
-            signal = _agent_signal_to_opinion_signal(agent_output, agent_name, brief)
-            drivers = agent_output.sources[:3] if hasattr(agent_output, "sources") and agent_output.sources else []
-            confidence = (
-                agent_output.confidence
-                if hasattr(agent_output, "confidence") and agent_output.confidence is not None
-                else 0.5
-            )
-
-            opinion = OpinionRecord(
-                ticker=brief.ticker,
-                agent_name=agent_name,
-                opinion_date=brief.date.date(),
-                signal=signal,
-                confidence=confidence,
-                conviction=brief.conviction if brief.conviction is not None else 0.5,
-                drivers=drivers,
-                forward_return_5d=None,
-            )
+            continue  # no output, no row: an invented neutral row would be counted as a call
+        drivers = agent_output.sources[:3] if hasattr(agent_output, "sources") and agent_output.sources else []
+        confidence = (
+            agent_output.confidence
+            if hasattr(agent_output, "confidence") and agent_output.confidence is not None
+            else 0.5
+        )
+        opinion = OpinionRecord(
+            ticker=brief.ticker,
+            agent_name=agent_name,
+            opinion_date=brief.date.date(),
+            signal=brief.recommendation,
+            confidence=confidence,
+            conviction=brief.conviction if brief.conviction is not None else 0.5,
+            drivers=drivers,
+            forward_return_5d=None,
+        )
 
         # Record and check return value
         success = record_opinion(opinion)
@@ -660,6 +630,7 @@ def invoke_pipeline(ticker: str) -> tuple[InvestmentBrief, dict]:
             "factor_loadings": None,
             "failed_agents": [],
             "agent_errors": {},
+            "synthesis_model_used": None,
         }
         final = _get_graph().invoke(initial)
         brief_from_state: InvestmentBrief | None = final.get("brief")

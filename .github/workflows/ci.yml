@@ -46,9 +46,8 @@ jobs:
       - run: uv sync --python ${{ matrix.python }} --extra dev
       - run: uv run ruff check src tests tools docs/report
       - run: uv run black --check --line-length 120 src tests tools docs/report
-      - name: mypy (non-blocking; count recorded in the job log)
-        run: uv run mypy || true
-        continue-on-error: true
+      - name: mypy (blocking above the recorded ceiling of known errors)
+        run: uv run python tools/mypy_ratchet.py
       - run: uv run pytest --collect-only -q
       - run: uv run pytest -m "not live" -q
       - name: offline demo smoke (blocking)

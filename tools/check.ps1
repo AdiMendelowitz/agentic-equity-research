@@ -4,7 +4,7 @@
 .DESCRIPTION
   Usage: powershell -File tools\check.ps1            (add -SkipSync to skip the dependency sync)
   Runs, in the project environment (.venv, Python from .python-version): dependency sync, redaction scan, ruff, black,
-  mypy (non-blocking), figure build, test suite, and the demo smoke test once the demo package exists.
+  mypy (blocking above the ceiling in tools\mypy_ratchet.py), figure build, test suite, and the demo smoke test once the demo package exists.
   Every line of output is shown and also written, UTF-8, to notes\runs\check-<timestamp>.log together with the commit id,
   so the log is the record of the run. Exit code 0 means every blocking step passed.
 #>
@@ -52,7 +52,7 @@ Invoke-Step "python" "uv run python -V" $true
 Invoke-Step "redaction scan" "uv run python tools/redact_check.py" $true
 Invoke-Step "ruff" "uv run ruff check src tests tools docs/report" $true
 Invoke-Step "black" "uv run black --check --line-length 120 src tests tools docs/report" $true
-Invoke-Step "mypy" "uv run mypy" $false
+Invoke-Step "mypy" "uv run python tools/mypy_ratchet.py" $true
 if (Test-Path -Path "docs\report\build_figures.py") { Invoke-Step "figures" "uv run python docs/report/build_figures.py" $true }
 Invoke-Step "collect" "uv run pytest --collect-only -q" $true
 Invoke-Step "pytest" "uv run pytest" $true

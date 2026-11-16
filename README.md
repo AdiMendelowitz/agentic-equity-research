@@ -138,6 +138,7 @@ The first run failed as a design and stays on record in `docs/data/detection_cur
 - **Data gates.** `tests/test_gates.py` checks the published data schemas and keeps the demo package out of ML and evaluation code.
 - **Publication checks.** A redaction scan (`tools/redact_check.py`), a secrets scan (gitleaks) and a licence audit that fails on GPL and AGPL licence names in the locked environment run in CI.
 - **Pre-registered analysis.** `tests/test_control_v3.py` pins the equivalence, Holm and paired-gap rules on hand-built cases and checks that the specification text states the same constants as the code.
+- **Types.** mypy runs in CI against a ceiling of 63 known errors (`tools/mypy_ratchet.py`); the count may fall and may not rise.
 - **Versions.** CI runs the test suite and a blocking offline demo on Python 3.12, 3.13 and 3.14.
 
 ## Limits
@@ -150,6 +151,7 @@ The first run failed as a design and stays on record in `docs/data/detection_cur
 - The control's oracle thresholds the true conditional mean at the cost and is not the rule that maximises balanced accuracy; the analytic ceiling is for the zero-cost sign problem.
 - The control experiment uses one synthetic signal family; it shows the harness can find that signal, not that real prices carry one.
 - The control's expectations were fixed before its results in the private development history; each release here is a single commit, so that order cannot be checked from this repository. That applies to versions 1 and 2. From version 3 the specification is released in a public commit, and its hash posted in a public issue, before the first public commit of the results. The hashes for version 3 cover three files; the code they import is fixed by the release commit, and the start of the run is recorded only in a local log.
+- The agents emit analysis and a confidence, not a directional call. Each per-agent opinion row therefore stores the synthesis recommendation, so a per-agent hit rate from those rows measures the synthesis and not the agent.
 - Briefs are scored against a five-day move, while the underlying thesis spans weeks to months.
 - The published aggregates were not re-scored with the HOLD rule, which was defined after they were seen.
 - `numba` is overridden in `pyproject.toml` so that `pandas-ta` resolves on Python 3.14.

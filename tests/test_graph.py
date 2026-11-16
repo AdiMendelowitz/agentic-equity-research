@@ -1,4 +1,4 @@
-"""Tests for LangGraph pipeline: build_brief caching, SynthesisOutput validation."""
+"""Tests for the LangGraph pipeline: synthesis output validation, the synthesis node, opinion rows, the ML node."""
 
 import json
 from unittest.mock import MagicMock, patch
@@ -101,23 +101,75 @@ class TestSynthesisOptimizations:
             token_estimate > 1024
         ), f"_SYNTH_SYSTEM_BASE is only ~{token_estimate} tokens — must exceed 1024 to qualify for ephemeral caching"
 
-    def test_synthesize_uses_build_synthesis_user_message(self) -> None:
-        import inspect
+    def test_synthesize_sends_the_built_prompt_through_the_llm_client(self) -> None:
+        """The prompt builder's text reaches complete() on the synthesis tier, checked by behaviour."""
+        from aer.graph import _synthesize
 
-        import aer.graph as m
+        payload = {
+            "recommendation": "BUY",
+            "conviction": 0.7,
+            "summary": "strong outlook",
+            "risks": ["rate risk"],
+            "catalysts": ["services growth"],
+        }
+        response = MagicMock()
+        response.content = json.dumps(payload)
+        calls: list[dict] = []
 
-        source = inspect.getsource(m._synthesize)
-        assert (
-            "build_synthesis_user_message" in source
-        ), "_synthesize must call build_synthesis_user_message to use the prompt builder"
+        def _complete(**kwargs):
+            calls.append(kwargs)
+            return response
 
-    def test_synthesize_uses_complete_function(self) -> None:
-        import inspect
+        with (
+            patch("aer.graph.build_synthesis_user_message", return_value="PROMPT-MARKER") as builder,
+            patch("aer.graph.complete", side_effect=_complete),
+            patch("aer.graph.get_recommendation_log_store") as mock_log_store,
+        ):
+            mock_log_store.return_value.log = MagicMock()
+            result = _synthesize(_synthesis_state())
 
-        import aer.graph as m
+        assert builder.call_count == 1
+        assert builder.call_args.args[0] == "AAPL"
+        assert set(builder.call_args.args[1]) == {"fundamental", "technical", "macro", "sentiment", "positioning"}
+        assert len(calls) == 1
+        assert calls[0]["user_message"].startswith("PROMPT-MARKER")
+        assert calls[0]["tier"] == "SYNTHESIS"
+        assert result["brief"].recommendation == "BUY"
 
-        source = inspect.getsource(m._synthesize)
-        assert "complete" in source, "_synthesize must call complete() from the unified LLM client"
+
+class TestOpinionRows:
+    def _state(self) -> dict:
+        return {
+            "ticker": "AAPL",
+            "fundamental": _agent("fundamental"),
+            "technical": None,
+            "macro": _agent("macro"),
+            "sentiment": None,
+            "positioning": _agent("positioning"),
+            "brief": _brief(),
+        }
+
+    def test_rows_only_for_agents_that_produced_output(self) -> None:
+        """An agent with no output gets no opinion row, and every row carries the synthesis recommendation."""
+        from aer.graph import _post_process
+
+        recorded: list = []
+
+        def _record(opinion) -> bool:
+            recorded.append(opinion)
+            return True
+
+        with (
+            patch("aer.graph.record_opinion", side_effect=_record),
+            patch("aer.data.price_targets.compute_price_targets", return_value=None),
+            patch("aer.risk.factors.get_factor_loadings", return_value=None),
+            patch("aer.risk.walkforward.run_walk_forward", return_value=None),
+        ):
+            _post_process(self._state())
+
+        assert [o.agent_name for o in recorded] == ["fundamental", "macro", "positioning"]
+        assert {o.signal for o in recorded} == {"BUY"}
+        assert all(o.confidence == 0.8 and o.conviction == 0.75 for o in recorded)
 
 
 def _synthesis_state() -> dict:
@@ -333,11 +385,10 @@ class TestRunMLPredictionEnsemble:
 
         cache = Cache(db_path=str(tmp_path / "ml_test.db"))
 
-        with patch("aer.graph._run_ml_prediction.__wrapped__", None, create=True):
-            with patch("aer.ml.models.train_and_predict", return_value=(lgbm_pred, logistic_pred)):
-                with patch("aer.ml.features.build_feature_matrix", return_value=MagicMock()):
-                    with patch("aer.graph.agent_cache", return_value=cache):
-                        result = _run_ml_prediction(state)
+        with patch("aer.ml.models.train_and_predict", return_value=(lgbm_pred, logistic_pred)):
+            with patch("aer.ml.features.build_feature_matrix", return_value=MagicMock()):
+                with patch("aer.graph.agent_cache", return_value=cache):
+                    result = _run_ml_prediction(state)
 
         ml = result["brief"].ml_prediction
         assert ml is not None, "ml_prediction must not be None"
@@ -377,39 +428,3 @@ class TestRunMLPredictionEnsemble:
                     result = _run_ml_prediction(state)
 
         assert result["brief"].ml_prediction is None, "ml_prediction must be None when train_and_predict returns None"
-
-
-# ---------------------------------------------------------------------------
-# professor_critique node in graph.py
-# ---------------------------------------------------------------------------
-
-
-class TestProfessorCritiqueNode:
-    @pytest.mark.skip(reason="component not in this slice")
-    def test_professor_critique_node_registered(self) -> None:
-        """_build_graph() must register a node named 'professor_critique' in the compiled graph."""
-        from aer.graph import _build_graph
-
-        graph = _build_graph()
-        node_names = list(graph.nodes.keys())
-        assert "professor_critique" in node_names, (
-            f"'professor_critique' node missing from compiled graph. " f"Registered nodes: {node_names}"
-        )
-
-    @pytest.mark.skip(reason="component not in this slice")
-    def test_run_professor_critique_returns_none_when_no_ticker(self) -> None:
-        """_run_professor_critique({}) must return {'professor_critique': None} when 'brief' is absent.
-
-        The function must not raise - it has a defensive None path for missing brief.
-        """
-        from unittest.mock import patch
-
-        from aer.graph import _run_professor_critique
-
-        empty_state: dict = {}
-
-        # Patch the internal critique_recommendation import so no real LLM call is made.
-        with patch("aer.agents.professor.critique_recommendation", return_value="mocked critique"):
-            result = _run_professor_critique(empty_state)  # type: ignore[arg-type]
-
-        assert result == {"professor_critique": None}, f"Expected {{'professor_critique': None}}, got {result!r}"
