@@ -235,7 +235,7 @@ def _post_process(state: BriefState) -> dict:
     except Exception as e:
         logger.warning("Walk-forward validation failed for %s: %s", brief.ticker, e)
 
-    # Record opinions for all 8 agents
+    # Record one opinion row per agent name below; a name with no output gets a neutral row
     agents_to_record = [
         ("fundamental", state.get("fundamental")),
         ("technical", state.get("technical")),
@@ -409,7 +409,7 @@ def _synthesize(state: BriefState) -> dict:
     failed = state.get("failed_agents", [])
     if failed:
         logger.warning("Synthesis proceeding with %d failed agents: %s", len(failed), failed)
-    if len(failed) >= 4:  # More than 1 agent failed out of 5
+    if len(failed) >= 4:  # synthesis needs at least two of the five agents
         errors_msg = "; ".join(
             f"{agent}: {state.get('agent_errors', {}).get(agent, 'unknown error')}" for agent in failed
         )
@@ -637,8 +637,9 @@ def _get_graph() -> Any:
 def invoke_pipeline(ticker: str) -> tuple[InvestmentBrief, dict]:
     """Run the graph once for `ticker`; return (brief, meta). Additive core used by run_pipeline.
 
-    The invoke/deepcopy/vintage-merge core WITHOUT caching or calibration logging (run_pipeline
-    owns persistence and the calibration log). Never mutates the returned LangGraph state.
+    The invoke/deepcopy/vintage-merge core. This function adds no caching and no logging of its own;
+    the graph nodes write opinion rows, the recommendation log and the ML prediction cache during
+    the run. Never mutates the returned LangGraph state.
     """
     from copy import deepcopy
 

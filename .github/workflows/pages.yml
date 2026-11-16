@@ -1,0 +1,45 @@
+name: pages
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: pages
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    env:
+      UV_PYTHON: "3.12"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2  # v10.3.3
+      - run: uv python install 3.12
+      - run: uv sync --python 3.12 --extra dev
+      - name: report, figure, scan and workflow tests (accessibility and no external origin included)
+        run: uv run pytest tests/test_report_build.py tests/test_report_figures.py tests/test_redact_site.py tests/test_pages_workflow.py
+      - name: figures from docs/data
+        run: uv run python docs/report/build_figures.py
+      - name: report page from docs/data
+        run: uv run python docs/report/build_report.py --out site
+      - name: redaction scan over the built site
+        run: python3 tools/redact_check.py site
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: site
+  deploy:
+    # the private repository runs the build and the scan as a check before a release; only the public one publishes
+    if: github.repository == 'AdiMendelowitz/agentic-equity-research'
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

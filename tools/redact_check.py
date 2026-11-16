@@ -14,6 +14,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 SKIP_DIRS = {".git", ".venv", "notes", "__pycache__", ".cache", ".pytest_cache", ".ruff_cache", ".mypy_cache"}
+# gitignored output folders: skipped in a scan of the tree, scanned when one of them is named as the target
+SKIP_DIRS |= {"site", "artifacts", "logs", "eval_log", "build", "dist"}
 SKIP_FILES = {"CLAUDE.md", ".env"}  # gitignored internal files; never part of the public tree
 PROSE_EXT = {
     ".md",
@@ -22,7 +24,7 @@ PROSE_EXT = {
     ".jsonl",
     ".csv",
 }  # rules that make no sense in code (handles, quotations) apply here only
-TEXT_EXT = {".py", ".md", ".toml", ".yml", ".yaml", ".json", ".jsonl", ".csv", ".txt", ".cfg", ".ini"}
+TEXT_EXT = {".py", ".md", ".toml", ".yml", ".yaml", ".json", ".jsonl", ".csv", ".txt", ".cfg", ".ini", ".html"}
 
 RULES: dict[str, re.Pattern[str]] = {
     "secret": re.compile(
@@ -115,13 +117,17 @@ def main(argv: list[str]) -> int:
     targets = [Path(a).resolve() for a in argv[1:]] or [ROOT]
     hits: list[str] = []
     for t in targets:
+        if not t.exists():
+            # a scan of a path that is not there would otherwise report zero hits
+            print(f"redact_check: target not found: {t}")
+            return 2
         files = (
             [t]
             if t.is_file()
             else [
                 p
                 for p in t.rglob("*")
-                if p.is_file() and not (set(p.relative_to(ROOT).parts) & SKIP_DIRS) and p.name not in SKIP_FILES
+                if p.is_file() and not (set(p.relative_to(t).parts) & SKIP_DIRS) and p.name not in SKIP_FILES
             ]
         )
         for p in files:

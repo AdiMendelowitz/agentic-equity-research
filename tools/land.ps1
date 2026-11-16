@@ -9,7 +9,7 @@
   run with uv in an environment outside the repository). Asks for a yes when more than 20 files are staged.
   After the push it waits for the CI run of the new commit and prints its result (when gh is installed).
   -SkipPreChecks skips the uv build and collection checks only. -NonInteractive refuses a landing of more than 20 files
-  instead of asking. The exit code is the CI result (0 when CI is green or when no CI run was waited for).
+  instead of asking. The exit code is the CI result (0 only when the run of every workflow is found and green, or when nothing was pushed).
 #>
 param(
   [Parameter(Mandatory = $true)][string]$Landing,
@@ -81,20 +81,30 @@ Write-Output "authors:"; git --no-pager log --format="%ae" | Sort-Object -Unique
 Write-Output "head:"; git --no-pager log --oneline --max-count 3 | ForEach-Object { Write-Output "$_" }
 if ($Push -and (Get-Command gh -ErrorAction SilentlyContinue)) {
   $sha = git --no-pager rev-parse HEAD
-  $runId = $null
-  foreach ($attempt in 1..8) {
-    Start-Sleep -Seconds 5
-    $runId = gh run list --commit $sha --limit 1 --json databaseId --jq ".[0].databaseId"
-    if ($runId) { break }
+  # one run per workflow file starts on a push; each is found by name so that neither hides the other
+  $workflows = @(git --no-pager ls-tree --name-only HEAD .github/workflows/ | Where-Object { $_ -match '\.yml$' } | ForEach-Object { Split-Path -Leaf $_ } | Sort-Object)
+  foreach ($workflow in $workflows) {
+    $runId = $null
+    # a workflow file pushed for the first time can take over a minute to register its run
+    foreach ($attempt in 1..24) {
+      Start-Sleep -Seconds 5
+      $runId = gh run list --workflow $workflow --commit $sha --limit 1 --json databaseId --jq ".[0].databaseId"
+      if ($runId) { break }
+    }
+    Write-Output "$workflow run: $runId"
+    if ($runId) {
+      Write-Output "waiting for $workflow run $runId (about two minutes)"
+      gh run watch $runId --exit-status
+      $code = $LASTEXITCODE
+      Write-Output "$workflow exit code: $code (0 means green)"
+      if ($code -ne 0) { $ciCode = $code }
+    } else {
+      Write-Output "no $workflow run found for $sha; the landing is not confirmed"
+      $ciCode = 1
+    }
   }
   gh run list --limit 4 | ForEach-Object { Write-Output "$_" }
-  Write-Output "ci run: $runId"
-  if ($runId) {
-    Write-Output "waiting for CI run $runId (about two minutes)"
-    gh run watch $runId --exit-status
-    $ciCode = $LASTEXITCODE
-    Write-Output "ci exit code: $ciCode (0 means green)"
-  } else { Write-Output "no CI run found yet for $sha; check gh run list in a minute" }
+  Write-Output "ci exit code: $ciCode (0 means every workflow is green)"
 }
 try { Stop-Transcript | Out-Null } catch { }
 exit $ciCode

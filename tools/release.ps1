@@ -72,7 +72,7 @@ Write-Log (@("", "=== exported files: $($files.Count)") + $files)
 # 3. checks on the export, which is what a reader receives
 $internal = @($files | Where-Object { $_ -match '^(notes/|CLAUDE\.md$)' -or $_ -match '(^|/)\.fuse_hidden' -or $_ -match '\.(db|sqlite|pkl|joblib)$' })
 if ($internal.Count -ne 0) { Stop-Release "internal or generated files in the export: $($internal -join ', ')" }
-foreach ($required in @("README.md", "LICENSE", "pyproject.toml", "uv.lock", ".github/workflows/ci.yml")) {
+foreach ($required in @("README.md", "LICENSE", "pyproject.toml", "uv.lock", ".github/workflows/ci.yml", ".github/workflows/pages.yml")) {
   if ($files -notcontains $required) { Stop-Release "required file missing from the export: $required" }
 }
 Write-Log @("", "=== gitleaks on the export")
@@ -131,18 +131,44 @@ $sha = (git --no-pager rev-parse HEAD)
 Write-Log @("pushed $sha to $PublicUrl")
 $ciCode = 0
 if (Get-Command gh -ErrorAction SilentlyContinue) {
-  $runId = $null
-  foreach ($attempt in 1..8) {
-    Start-Sleep -Seconds 5
-    $runId = gh run list --commit $sha --limit 1 --json databaseId --jq ".[0].databaseId"
-    if ($runId) { break }
+  # one run per workflow file starts on the push; each is found by name so that neither hides the other
+  $workflows = @(Get-ChildItem -Path (Join-Path $public ".github\workflows") -Filter "*.yml" | Sort-Object Name | ForEach-Object { $_.Name })
+  foreach ($workflow in $workflows) {
+    $runId = $null
+    # a workflow file pushed for the first time can take over a minute to register its run
+    foreach ($attempt in 1..24) {
+      Start-Sleep -Seconds 5
+      $runId = gh run list --workflow $workflow --commit $sha --limit 1 --json databaseId --jq ".[0].databaseId"
+      if ($runId) { break }
+    }
+    if ($runId) {
+      Write-Log @("waiting for the public $workflow run $runId")
+      gh run watch $runId --exit-status
+      $code = $LASTEXITCODE
+      Write-Log @("public $workflow exit code: $code (0 means green)")
+      if ($code -ne 0) { $ciCode = $code }
+    } else {
+      Write-Log @("no $workflow run found for $sha")
+      $ciCode = 1
+    }
   }
-  if ($runId) {
-    Write-Log @("waiting for the public CI run $runId")
-    gh run watch $runId --exit-status
-    $ciCode = $LASTEXITCODE
-    Write-Log @("public ci exit code: $ciCode (0 means green)")
-  } else { Write-Log @("no CI run found yet for $sha") }
+  Write-Log @("public ci exit code: $ciCode (0 means every workflow is green)")
+  # the report page: the address comes from GitHub, and the page must answer and carry the report title
+  $pagesUrl = (cmd /c "gh api repos/{owner}/{repo}/pages --jq .html_url 2>nul")
+  if ($LASTEXITCODE -eq 0 -and $pagesUrl) {
+    # a first deployment can answer 404 for a short while after the deploy job ends
+    foreach ($attempt in 1..3) {
+      try {
+        $response = Invoke-WebRequest -Uri $pagesUrl -UseBasicParsing -TimeoutSec 60
+        $titled = $response.Content -match "<title>Agentic equity research: evaluation report</title>"
+        Write-Log @("pages url $pagesUrl status $($response.StatusCode) report title found: $titled")
+        break
+      } catch {
+        Write-Log @("pages url $pagesUrl request $attempt of 3 failed: $($_.Exception.Message)")
+        Start-Sleep -Seconds 20
+      }
+    }
+  } else { Write-Log @("pages url not available: GitHub Pages is not enabled for the public repository") }
 }
 Set-Location -Path $repo
 Write-Log @("", "RESULT: PUBLISHED $sha ($($files.Count) files, $count commit(s) in the public repository)", "log: $log")
