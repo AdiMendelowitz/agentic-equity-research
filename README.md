@@ -11,6 +11,8 @@
 > [!NOTE]
 > A research demonstration, not investment advice and not a trading system. By default it runs offline on synthetic data and makes no model call.
 
+**[Evaluation report](https://adimendelowitz.github.io/agentic-equity-research/)**, rebuilt from `docs/data` on every push, with the hash of each input in its footer.
+
 [Results](#results-at-a-glance) · [Quick start](#quick-start) · [How it works](#how-it-works) · [Evaluation](#what-the-evaluation-found) · [Control experiment](#does-the-harness-detect-a-signal-that-exists) · [Tests](#what-the-tests-check) · [Limits](#limits) · [Roadmap](#roadmap)
 
 ## Results at a glance
@@ -157,7 +159,6 @@ The first run failed as a design and stays on record in `docs/data/detection_cur
 
 Planned next:
 
-- The results report, built today by `docs/report/build_report.py`, published on GitHub Pages.
 - Exact baselines for the recorded calls, which need one further whole-sample aggregate of forward-return directions.
 - An oracle check with the same target and threshold as the analytic ceiling, and a cause for the unexplained control result in the exploratory zero-signal analysis.
 - Dependence-aware intervals for the live evaluation, with the method published.
