@@ -93,13 +93,23 @@ class TestSynthesisOutput:
 
 
 class TestSynthesisOptimizations:
-    def test_synth_system_prompt_exceeds_1024_tokens(self) -> None:
+    def test_synth_system_prompt_is_long_by_a_character_estimate(self) -> None:
+        """A length heuristic of four characters per token; it does not measure a provider's token count."""
         from aer.utils.prompt_builders import _SYNTH_SYSTEM_BASE
 
         token_estimate = len(_SYNTH_SYSTEM_BASE) // 4
-        assert (
-            token_estimate > 1024
-        ), f"_SYNTH_SYSTEM_BASE is only ~{token_estimate} tokens — must exceed 1024 to qualify for ephemeral caching"
+        assert token_estimate > 1024, f"_SYNTH_SYSTEM_BASE is about {token_estimate} tokens by character count"
+
+    def test_synthesis_needs_two_agents_with_output(self) -> None:
+        from aer.graph import _synthesize
+
+        state = _synthesis_state()
+        for name in ("technical", "macro", "sentiment", "positioning"):
+            state[name] = None
+        with patch("aer.graph.complete") as mock_complete:
+            with pytest.raises(RuntimeError, match="synthesis needs two"):
+                _synthesize(state)
+        assert mock_complete.call_count == 0
 
     def test_synthesize_sends_the_built_prompt_through_the_llm_client(self) -> None:
         """The prompt builder's text reaches complete() on the synthesis tier, checked by behaviour."""
@@ -338,7 +348,6 @@ def _make_ml_state(ticker: str = "AAPL", recommendation: str = "BUY") -> dict:
         "brief": brief,
         "backtesting": None,
         "options_strategy": None,
-        "ml_prediction": None,
     }
 
 
@@ -392,8 +401,11 @@ class TestRunMLPredictionEnsemble:
 
         ml = result["brief"].ml_prediction
         assert ml is not None, "ml_prediction must not be None"
-        assert ml.ensemble_prob_up is not None, "ensemble_prob_up must be populated"
-        assert ml.ensemble_direction in ("UP", "DOWN"), "ensemble_direction must be UP or DOWN"
+        # weights 0.58 and 0.54 give 0.58 / 1.12 on the calibrated LightGBM probability 0.63, the rest on 0.55
+        expected = (0.58 / 1.12) * 0.63 + (0.54 / 1.12) * 0.55
+        assert ml.ensemble_prob_up == pytest.approx(expected, abs=1e-6)
+        assert ml.ensemble_direction == "UP"
+        assert ml.agrees_with_llm is True
 
     def test_run_ml_prediction_skipped_returns_no_ensemble(self, tmp_path) -> None:
         """Both skipped → ensemble_prob_up stays None (compute_ensemble returns {})."""
@@ -410,9 +422,9 @@ class TestRunMLPredictionEnsemble:
                     result = _run_ml_prediction(state)
 
         ml = result["brief"].ml_prediction
-        # ml may be the skipped pred (not None), but ensemble_prob_up should be None
-        if ml is not None:
-            assert ml.ensemble_prob_up is None, "skipped predictions must not produce ensemble_prob_up"
+        assert ml is not None, "the skipped prediction is kept on the brief"
+        assert ml.prediction_skipped is True
+        assert ml.ensemble_prob_up is None, "skipped predictions must not produce ensemble_prob_up"
 
     def test_run_ml_prediction_none_result_no_crash(self, tmp_path) -> None:
         """train_and_predict returns None → brief.ml_prediction is None, no exception."""

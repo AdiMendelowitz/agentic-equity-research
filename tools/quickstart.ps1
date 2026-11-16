@@ -4,7 +4,7 @@
 .DESCRIPTION
   Usage: powershell -File tools\quickstart.ps1                 (checks the wheel built from this folder)
          powershell -File tools\quickstart.ps1 -Source <dir>   (checks another checkout, for example a fresh clone)
-  Builds the wheel, installs it into a new virtual environment under %TEMP% (Python 3.14 by default), changes to an empty
+  Builds the wheel, installs it into a new virtual environment under %LOCALAPPDATA%\aer-scratch (Python 3.14 by default), changes to an empty
   folder outside the repository so nothing is imported from the source tree, and runs the README command:
   aer-demo. Every line is written, UTF-8, to notes\runs\quickstart-<timestamp>.log.
   Exit code 0 means the demo command exited 0 from the installed wheel.
@@ -23,11 +23,15 @@ $utf8 = New-Object System.Text.UTF8Encoding $false
 try { [Console]::OutputEncoding = $utf8 } catch { Write-Host "console encoding unchanged: $_" }
 $env:PYTHONUTF8 = "1"
 $env:PYTHONIOENCODING = "utf-8"
-$work = Join-Path $env:TEMP "aer-quickstart-$stamp"
+# scratch lives outside the repository and outside %TEMP%, which disk cleaners empty; runs older than two days go
+$scratch = Join-Path $env:LOCALAPPDATA "aer-scratch"
+New-Item -ItemType Directory -Force -Path $scratch | Out-Null
+Get-ChildItem -Path $scratch -Directory -Filter "aer-quickstart-*" | Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-2) } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+$work = Join-Path $scratch "aer-quickstart-$stamp"
 $dist = Join-Path $work "dist"
 $venv = Join-Path $work "venv"
 $empty = Join-Path $work "empty"
-if ($work -match "\s") { throw "the temp folder path contains a space, which this script does not quote: $work" }
+if ($work -match "\s") { throw "the scratch folder path contains a space, which this script does not quote: $work" }
 New-Item -ItemType Directory -Force -Path $dist, $empty | Out-Null
 $failed = New-Object System.Collections.Generic.List[string]
 

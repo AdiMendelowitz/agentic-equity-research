@@ -8,7 +8,7 @@ Design review fixes applied:
 - B1: Uses get_price_history_raw (auto_adjust=False), not get_price_history
 - B2: Per-bar column reads, not .iloc[-1] snapshot broadcast
 - H2: Split guard - labels for bars with splits in [t, t+5] window are NaN
-- M1: ISA_9 excluded (Senkou Span A - forward-shifted 26 bars in pandas-ta)
+- M1: ISA_9 excluded conservatively (Senkou Span A is plotted 26 bars ahead; its row alignment was not verified)
 - L1: rolling_52w_high/low via .rolling(252) not .tail(252)
 """
 
@@ -66,7 +66,7 @@ def build_feature_matrix(ticker: str, period: str = "3y", prices: pd.DataFrame |
     df.ta.roc(append=True)
     df.ta.vwma(length=20, append=True)
 
-    # Ichimoku: ISA_9 (Senkou Span A) is forward-projected 26 bars - excluded.
+    # Ichimoku: ISA_9 (Senkou Span A) is plotted 26 bars ahead - excluded conservatively.
     # include_chikou=False suppresses ICS_26. Only merge ITS_9 and IKS_26.
     try:
         ichi, _ = df.ta.ichimoku(tenkan=9, kijun=26, senkou=52, include_chikou=False)

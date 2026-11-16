@@ -50,7 +50,7 @@ if ($SkipPreChecks) {
   Write-Output "pre-checks skipped by switch"
 } elseif (Get-Command uv -ErrorAction SilentlyContinue) {
   $env:UV_PROJECT_ENVIRONMENT = Join-Path $env:LOCALAPPDATA "aer-landing-venv"
-  $buildDir = Join-Path $env:TEMP "aer-landing-build"
+  $buildDir = Join-Path (Join-Path $env:LOCALAPPDATA "aer-scratch") "aer-landing-build"
   Write-Output "pre-check: package metadata build (first run downloads dependencies and can take a few minutes)"
   uv build --out-dir $buildDir
   if ($LASTEXITCODE -ne 0) { throw "uv build failed; landing refused (rerun with -SkipPreChecks only if the failure is in the check itself)" }
@@ -105,6 +105,9 @@ if ($Push -and (Get-Command gh -ErrorAction SilentlyContinue)) {
   }
   gh run list --limit 4 | ForEach-Object { Write-Output "$_" }
   Write-Output "ci exit code: $ciCode (0 means every workflow is green)"
+} elseif ($Push) {
+  Write-Output "gh is not installed: the workflows of the pushed commit were not checked"
+  $ciCode = 1
 }
 try { Stop-Transcript | Out-Null } catch { }
 exit $ciCode

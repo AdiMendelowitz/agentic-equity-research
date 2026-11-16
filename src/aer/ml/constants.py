@@ -9,7 +9,7 @@ MODEL_DIR: Path = _ML_ROOT / "ml_models"
 
 # Cross-validation
 PREDICTION_HORIZON_DAYS: int = 5
-PURGE_GAP_BARS: int = 10  # 2× horizon - eliminates overlapping-label bias
+PURGE_GAP_BARS: int = 10  # 2× horizon - keeps training-label windows from crossing a validation boundary
 N_CV_SPLITS: int = 5
 CV_TEST_SIZE_BARS: int = 55
 # Minimum feature rows for valid CV: ceil(N_CV_SPLITS*(CV_TEST_SIZE_BARS+PURGE_GAP_BARS) / 0.85)
@@ -65,8 +65,9 @@ ML_CONFIRM_THRESHOLD: float = 0.60
 ML_OPPOSE_THRESHOLD: float = 0.40
 
 # Feature columns included in the ML feature matrix.
-# ISA_9 (Senkou Span A) excluded: forward-projected 26 bars = look-ahead bias.
-# ICS_26 (Chikou) excluded: conservative per design review.
+# ISA_9 (Senkou Span A) excluded conservatively: the span is plotted 26 bars ahead and its row alignment in
+# the library output was not verified here. Plotting ahead is not in itself use of later data.
+# ICS_26 (Chikou) excluded: it is the close shifted back 26 bars, which puts later closes on earlier rows.
 FEATURE_COLS: list[str] = [
     "RSI_14",
     "MACD_12_26_9",

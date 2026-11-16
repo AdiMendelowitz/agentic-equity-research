@@ -36,6 +36,11 @@ def power_superiority(n: int, delta: float, sd: float, alpha: float) -> float:
 
 
 def power_tost(n: int, delta: float, sd: float, alpha: float) -> float:
+    """Conservative lower bound on the power of the two one-sided tests at a true mean of 0.50.
+
+    Each one-sided test fails to reject with probability p; the bound 1 - 2p ignores the overlap of the two
+    failures, so the exact joint power is at least this value.
+    """
     critical = float(t.ppf(1 - alpha, n - 1))
     return max(0.0, 1.0 - 2.0 * float(nct.cdf(critical, n - 1, delta * math.sqrt(n) / sd)))
 

@@ -1,17 +1,11 @@
-"""Platt calibration and F1-weighted soft-vote ensemble.
+"""F1-weighted soft-vote ensemble, and the sigmoid calibration class the training code uses.
 
-Design:
-- _fit_sigmoid_calibrator: fits sklearn._SigmoidCalibration on LightGBM X_calib predictions.
-  Uses the private _SigmoidCalibration directly. CalibratedClassifierCV(cv='prefit') is deprecated
-  since sklearn 1.6 in favour of FrozenEstimator; moving to that public API is planned.
+- _SC is sklearn's private _SigmoidCalibration. aer.ml.models fits it on pooled out-of-fold LightGBM
+  probabilities (_fit_platt_calibrator); no calibrator is fitted in this module.
 - compute_ensemble: F1-weighted soft vote combining calibrated LightGBM prob and logistic prob.
 """
 
-import logging
 from typing import Any
-
-import numpy as np
-from sklearn.pipeline import Pipeline
 
 try:
     from sklearn.calibration import _SigmoidCalibration as _SC  # private API - sklearn 1.8 verified
@@ -19,31 +13,6 @@ except ImportError:
     _SC = None  # guard against future sklearn API removal
 
 from aer.models import MLPrediction
-
-logger = logging.getLogger(__name__)
-
-
-def _fit_sigmoid_calibrator(
-    pipe: Pipeline,
-    X_calib: Any,
-    y_calib: np.ndarray,
-) -> "Any | None":
-    """Fit a Platt sigmoid calibrator on the calibration set. Returns None on failure."""
-    if _SC is None:
-        logger.warning("_SigmoidCalibration unavailable — sklearn API changed; calibration skipped")
-        return None
-    # Degenerate guard: must have both classes present BEFORE calling sc.fit()
-    if len(np.unique(y_calib)) < 2:
-        logger.warning("Calibration set has only one class — degenerate; calibration skipped")
-        return None
-    try:
-        raw_probs = pipe.predict_proba(X_calib)[:, 1]
-        sc = _SC()
-        sc.fit(raw_probs, y_calib)
-        return sc
-    except Exception as exc:
-        logger.warning("Calibration fit failed (%s): %s", type(exc).__name__, exc)
-        return None
 
 
 def compute_ensemble(

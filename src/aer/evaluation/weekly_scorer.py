@@ -8,6 +8,13 @@ synth_correct compares a weeks-to-months LLM thesis against 5-day price movement
 This metric is logged for observability. It is NOT used in should_trigger_review()
 to make model replacement decisions - the comparison is structurally biased against
 the LLM due to horizon mismatch.
+
+What the stored columns mean:
+- actual_direction is UP when the five-day return on adjusted closes is above zero and DOWN otherwise. There is
+  no cost band, so a wrong BUY fixes the outcome as DOWN and a wrong SELL or AVOID fixes it as UP.
+- ml_direction is the LightGBM member's direction, not the ensemble direction, so ml_correct scores that member.
+- The ML label in aer.ml.features is a return above a 10 basis point cost on unadjusted closes, so ml_correct
+  and the training target are not the same quantity.
 """
 
 import json
@@ -213,7 +220,10 @@ def resolve_pending_outcomes() -> int:
 
 
 def compute_rolling_metrics(min_n: int = MIN_OOS_FOR_MEANINGFUL_ACCURACY) -> dict | None:
-    """Return per-ticker accuracy metrics. Returns None if any ticker is below min_n."""
+    """Return per-ticker accuracy over every resolved row. Returns None if any ticker is below min_n.
+
+    The figures are cumulative: despite the name there is no date window.
+    """
     _init_db()
     with _DB_LOCK:
         conn = _connect()
@@ -222,8 +232,12 @@ def compute_rolling_metrics(min_n: int = MIN_OOS_FOR_MEANINGFUL_ACCURACY) -> dic
                 "SELECT ticker, synth_correct, ml_correct, resolution_status "
                 "FROM agent_eval WHERE resolution_status='RESOLVED'"
             ).fetchall()
+            unresolvable_rows = conn.execute(
+                "SELECT ticker, COUNT(*) FROM agent_eval WHERE resolution_status='UNRESOLVABLE' GROUP BY ticker"
+            ).fetchall()
         finally:
             conn.close()
+    unresolvable_by_ticker = {r[0]: int(r[1]) for r in unresolvable_rows}
 
     if not rows:
         return None
@@ -239,12 +253,12 @@ def compute_rolling_metrics(min_n: int = MIN_OOS_FOR_MEANINGFUL_ACCURACY) -> dic
     for ticker, ticker_rows in by_ticker.items():
         synth = [r["synth_correct"] for r in ticker_rows if r["synth_correct"] is not None]
         ml = [r["ml_correct"] for r in ticker_rows if r["ml_correct"] is not None]
-        unresolvable = sum(1 for r in ticker_rows if r["resolution_status"] == "UNRESOLVABLE")
+        unresolvable = unresolvable_by_ticker.get(ticker, 0)
         result[ticker] = {
             "n": len(ticker_rows),
             "synth_accuracy": sum(synth) / len(synth) if synth else None,
             "ml_accuracy": sum(ml) / len(ml) if ml else None,
-            "unresolvable_fraction": unresolvable / len(ticker_rows),
+            "unresolvable_fraction": unresolvable / (len(ticker_rows) + unresolvable),
             "ready_for_decisions": len(ticker_rows) >= MIN_OOS_FOR_DECISIONS,
         }
     return result
@@ -256,6 +270,9 @@ def should_trigger_review() -> dict[str, bool]:
     Note: agent_underperforming is intentionally excluded - synth_correct evaluates
     a weeks-to-months thesis against a 5-day window (horizon mismatch).
     Use it only as an observability signal, not a replacement trigger.
+
+    ml_drift_detected is a fixed accuracy floor (0.5 minus DRIFT_STD_MULTIPLIER times 0.1), not a comparison
+    with an estimated baseline; BASELINE_WINDOW_WEEKS only sets the row count before any flag can fire.
     """
     metrics = compute_rolling_metrics(min_n=MIN_OOS_FOR_MEANINGFUL_ACCURACY)
 

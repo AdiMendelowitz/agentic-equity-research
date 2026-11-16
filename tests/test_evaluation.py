@@ -63,6 +63,8 @@ def test_structural_quality_all_agents_none():
     assert "backtest_present" in quality
     assert quality["ml_prediction_present"] is False
     assert quality["backtest_present"] is False
+    assert quality["agents_complete"] is False, "a brief with no agent output is not complete"
+    assert "all_agents_agree_direction" not in quality
 
 
 def test_record_brief_writes_pending_row(tmp_path, monkeypatch):
@@ -157,6 +159,31 @@ def test_rolling_metrics_per_ticker_not_pooled(tmp_path, monkeypatch):
     result = ws.compute_rolling_metrics()
     assert result is not None
     assert "AAPL" in result and "GOOG" in result
+    assert result["AAPL"]["unresolvable_fraction"] == 0.0
+
+
+def test_rolling_metrics_count_unresolvable_rows(tmp_path, monkeypatch):
+    import aer.evaluation.weekly_scorer as ws
+
+    monkeypatch.setattr(ws, "_EVAL_DB_PATH", tmp_path / "eval.db")
+    ws._init_db()
+    now = time.time()
+    conn = sqlite3.connect(str(tmp_path / "eval.db"))
+    for i in range(120):
+        status = "RESOLVED" if i < 100 else "UNRESOLVABLE"
+        correct = 1 if status == "RESOLVED" else None
+        conn.execute(
+            "INSERT INTO agent_eval (ticker, brief_date, recommendation, conviction, resolution_status, "
+            "synth_correct, ml_correct, resolution_attempts, created_at, updated_at) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?)",
+            ("AAPL", f"2026-01-{(i % 28) + 1:02d}", "BUY", 0.7, status, correct, correct, 0, now, now),
+        )
+    conn.commit()
+    conn.close()
+    result = ws.compute_rolling_metrics()
+    assert result is not None
+    assert result["AAPL"]["n"] == 100
+    assert result["AAPL"]["unresolvable_fraction"] == 20 / 120
 
 
 def test_review_flags_suppressed_before_baseline(tmp_path, monkeypatch):

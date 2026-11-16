@@ -351,37 +351,43 @@ def test_wilson_interval_matches_hand_values() -> None:
     assert edge.high == pytest.approx(0.2775, abs=5e-4)
 
 
-def test_baseline_bounds_equal_independent_arithmetic_on_the_real_file() -> None:
+def test_outcome_counts_follow_from_the_directional_scoring_rule() -> None:
     by_rec = {r["recommendation"]: (int(r["n_resolved"]), int(r["n_synth_correct"])) for r in _eval_rows()}
     buy_n, buy_ok = by_rec["BUY"]
     sell_n = by_rec["SELL"][0] + by_rec["AVOID"][0]
     sell_ok = by_rec["SELL"][1] + by_rec["AVOID"][1]
-    total = buy_n + sell_n
-    p_buy, p_sell = buy_n / total, sell_n / total
-    bounds = build_report.baseline_bounds(_eval_rows())
-    assert bounds["always_bearish"] == pytest.approx((sell_ok / total, (sell_ok + buy_n - buy_ok) / total))
-    assert bounds["always_bullish"] == pytest.approx((buy_ok / total, (buy_ok + sell_n - sell_ok) / total))
-    assert bounds["class_matched_random"] == pytest.approx(
-        (
-            p_buy * buy_ok / total + p_sell * sell_ok / total,
-            p_buy * (buy_ok + sell_n - sell_ok) / total + p_sell * (sell_ok + buy_n - buy_ok) / total,
-        )
-    )
+    up, down = build_report.outcome_counts(_eval_rows())
+    # a correct BUY and a wrong SELL or AVOID are up moves; a correct SELL or AVOID and a wrong BUY are down moves
+    assert up == buy_ok + (sell_n - sell_ok)
+    assert down == sell_ok + (buy_n - buy_ok)
+    assert up + down == buy_n + sell_n
 
 
-def test_baseline_bounds_match_the_committed_counts() -> None:
-    bounds = build_report.baseline_bounds(_eval_rows())
-    assert bounds["always_bearish"] == pytest.approx((228 / 707, 390 / 707))
-    assert bounds["always_bullish"] == pytest.approx((114 / 707, 317 / 707))
+def test_baselines_match_the_committed_counts() -> None:
+    assert build_report.outcome_counts(_eval_rows()) == (317, 390)
+    rates = build_report.baselines(_eval_rows())
+    assert set(rates) == {"always_bearish", "always_bullish", "class_matched_random"}
+    assert rates["always_bearish"] == pytest.approx(390 / 707)
+    assert rates["always_bullish"] == pytest.approx(317 / 707)
+    assert rates["always_bearish"] + rates["always_bullish"] == pytest.approx(1.0)
+    assert rates["class_matched_random"] == pytest.approx((276 / 707) * (317 / 707) + (431 / 707) * (390 / 707))
 
 
-def test_baseline_bounds_are_ordered_and_class_matched_lies_in_unit_interval() -> None:
-    bounds = build_report.baseline_bounds(_eval_rows())
-    assert set(bounds) == {"always_bearish", "always_bullish", "class_matched_random"}
-    for low, high in bounds.values():
-        assert low <= high
-    low, high = bounds["class_matched_random"]
-    assert 0.0 <= low <= high <= 1.0
+def test_the_scoring_rule_the_baselines_assume_is_the_recorded_one() -> None:
+    from aer.evaluation.eval_models import compute_synth_correct
+
+    assert compute_synth_correct("BUY", "UP") is True and compute_synth_correct("BUY", "DOWN") is False
+    for bearish in ("SELL", "AVOID"):
+        assert compute_synth_correct(bearish, "DOWN") is True and compute_synth_correct(bearish, "UP") is False
+    assert compute_synth_correct("HOLD", "UP") is None
+    scorer = (ROOT / "src" / "aer" / "evaluation" / "weekly_scorer.py").read_text(encoding="utf-8")
+    assert 'actual_direction = "UP" if actual_return > 0 else "DOWN"' in scorer
+
+
+def test_outcome_counts_need_resolved_calls() -> None:
+    empty = [{"recommendation": "BUY", "n_rows": "3", "n_resolved": "0", "n_synth_correct": "0"}]
+    with pytest.raises(ValueError):
+        build_report.outcome_counts(empty)
 
 
 def test_design_effect_one_reproduces_the_plain_wilson_interval() -> None:
@@ -402,16 +408,28 @@ def test_design_effect_widens_the_interval_and_divides_the_count() -> None:
         assert row.contains_chance == (row.interval.low <= 0.5 <= row.interval.high)
 
 
-def test_baselines_table_shows_the_bounds_to_three_decimals(site: Path) -> None:
+def test_baselines_table_shows_exact_counts_and_rates(site: Path) -> None:
     rows = _tables(site)["baselines"]
-    bounds = build_report.baseline_bounds(_eval_rows())
-    accuracy = f"{342 / 707:.3f}"
-    assert rows[0] == ["Recorded calls", accuracy, accuracy]
-    assert [row[0] for row in rows[1:]] == ["Always bearish", "Always bullish", "Class-matched random"]
-    for row, key in zip(rows[1:], ("always_bearish", "always_bullish", "class_matched_random"), strict=True):
-        assert row[1:] == [f"{bounds[key][0]:.3f}", f"{bounds[key][1]:.3f}"]
-    assert rows[1][1:] == [f"{228 / 707:.3f}", f"{390 / 707:.3f}"]
-    assert rows[2][1:] == [f"{114 / 707:.3f}", f"{317 / 707:.3f}"]
+    assert rows[0] == ["Recorded calls", "342", f"{342 / 707:.3f}"]
+    assert rows[1] == ["Always bearish", "390", f"{390 / 707:.3f}"]
+    assert rows[2] == ["Always bullish", "317", f"{317 / 707:.3f}"]
+    rates = build_report.baselines(_eval_rows())
+    assert rows[3] == ["Class-matched random", "n/a", f"{rates['class_matched_random']:.3f}"]
+    text = (site / "index.html").read_text(encoding="utf-8")
+    assert "always saying down scores higher" in text
+    assert "cost band, so a wrong call fixes" in text
+
+
+def test_control_v3_section_refuses_data_missing_a_preregistered_signal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    lines = (DATA_DIR / "detection_curve_v3.csv").read_text(encoding="utf-8").splitlines()
+    kept = [lines[0]] + [line for line in lines[1:] if float(line.split(",")[0]) != 0.6]
+    assert len(kept) < len(lines)
+    (tmp_path / "detection_curve_v3.csv").write_text("\n".join(kept) + "\n", encoding="utf-8")
+    monkeypatch.setattr(build_report, "DATA_DIR", tmp_path)
+    with pytest.raises(ValueError, match="no rows"):
+        build_report.control_v3_section()
 
 
 def test_design_effect_table_has_one_row_per_effect(site: Path) -> None:

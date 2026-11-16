@@ -5,7 +5,7 @@
   Dry run (default):  powershell -File tools\release.ps1
   Publish:            powershell -File tools\release.ps1 -Publish
   The private repository (agentic-equity-research-dev) keeps the full history and never becomes public. This script
-  exports the files tracked at HEAD into a folder under %TEMP%, checks the export (no internal paths, gitleaks,
+  exports the files tracked at HEAD into a folder under %LOCALAPPDATA%\aer-scratch, checks the export (no internal paths, gitleaks,
   redaction scan, fresh-environment quick start), and prints the file list. With -Publish it then asks for the word
   publish, places the export as a single new commit in the public repository and waits for its CI run.
   The public repository receives files only: no commit, branch, tag or Actions log of the private one.
@@ -24,7 +24,11 @@ New-Item -ItemType Directory -Force -Path $runs | Out-Null
 $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $log = Join-Path $runs "release-$stamp.log"
 $utf8 = New-Object System.Text.UTF8Encoding $false
-$work = Join-Path $env:TEMP "aer-release-$stamp"
+# scratch lives outside the repository and outside %TEMP%, which disk cleaners empty; runs older than two days go
+$scratch = Join-Path $env:LOCALAPPDATA "aer-scratch"
+New-Item -ItemType Directory -Force -Path $scratch | Out-Null
+Get-ChildItem -Path $scratch -Directory -Filter "aer-release-*" | Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-2) } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+$work = Join-Path $scratch "aer-release-$stamp"
 $export = Join-Path $work "export"
 $public = Join-Path $work "public"
 $zip = Join-Path $work "tree.zip"
@@ -44,7 +48,7 @@ function Invoke-Logged([string]$commandLine) {
   return $LASTEXITCODE
 }
 
-if ($work -match "\s") { throw "the temp folder path contains a space, which this script does not quote: $work" }
+if ($work -match "\s") { throw "the scratch folder path contains a space, which this script does not quote: $work" }
 New-Item -ItemType Directory -Force -Path $work | Out-Null
 $mode = "DRY RUN"
 if ($Publish) { $mode = "PUBLISH" }
@@ -155,6 +159,7 @@ if (Get-Command gh -ErrorAction SilentlyContinue) {
   Write-Log @("public ci exit code: $ciCode (0 means every workflow is green)")
   # the report page: the address comes from GitHub, and the page must answer and carry the report title
   $pagesUrl = (cmd /c "gh api repos/{owner}/{repo}/pages --jq .html_url 2>nul")
+  $pageOk = $false
   if ($LASTEXITCODE -eq 0 -and $pagesUrl) {
     # a first deployment can answer 404 for a short while after the deploy job ends
     foreach ($attempt in 1..3) {
@@ -162,6 +167,7 @@ if (Get-Command gh -ErrorAction SilentlyContinue) {
         $response = Invoke-WebRequest -Uri $pagesUrl -UseBasicParsing -TimeoutSec 60
         $titled = $response.Content -match "<title>Agentic equity research: evaluation report</title>"
         Write-Log @("pages url $pagesUrl status $($response.StatusCode) report title found: $titled")
+        $pageOk = [bool]$titled
         break
       } catch {
         Write-Log @("pages url $pagesUrl request $attempt of 3 failed: $($_.Exception.Message)")
@@ -169,7 +175,17 @@ if (Get-Command gh -ErrorAction SilentlyContinue) {
       }
     }
   } else { Write-Log @("pages url not available: GitHub Pages is not enabled for the public repository") }
+  if (-not $pageOk) {
+    Write-Log @("report page check failed (see the pages url line above)")
+    if ($ciCode -eq 0) { $ciCode = 1 }
+  }
+  $verified = "workflows and report page checked, exit code $ciCode (0 means all green)"
+} else {
+  Write-Log @("gh is not installed: the public workflows and the report page were not checked")
+  $ciCode = 1
+  $verified = "NOT VERIFIED, gh is not installed"
 }
 Set-Location -Path $repo
-Write-Log @("", "RESULT: PUBLISHED $sha ($($files.Count) files, $count commit(s) in the public repository)", "log: $log")
+# the push has happened either way; the exit code and this line say whether it was verified
+Write-Log @("", "RESULT: PUBLISHED $sha ($($files.Count) files, $count commit(s) in the public repository); $verified", "log: $log")
 exit $ciCode

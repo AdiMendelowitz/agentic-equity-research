@@ -64,7 +64,6 @@ class BriefState(TypedDict):
     positioning: AgentOutput | None
     company_info: dict | None
     brief: InvestmentBrief | None
-    ml_prediction: MLPrediction | None
     news: AgentOutput | None
     factor_loadings: FactorLoadings | None
     # Track failed agents for synthesis validation
@@ -261,9 +260,13 @@ def _post_process(state: BriefState) -> dict:
 def _run_ml_prediction(state: BriefState) -> dict:
     """Run ML direction classifier after _post_process so brief is fully enriched.
 
-    Runs after _post_process (not after backtesting).
-    executor.shutdown(wait=False, cancel_futures=True): a timeout does not block the pipeline.
+    Runs after _post_process (not after backtesting). The prediction is written to brief.ml_prediction.
+    The timeout bounds how long this node waits, not the training itself: a worker thread that is already
+    running is not stopped, keeps running to completion and may still write its model file; its result is
+    discarded.
     Checks the MLPrediction cache before retraining (TTL_ANALYSIS = 43200s).
+    agrees_with_llm and ml_tension describe the LightGBM member (direction, prob_up_raw). They are set before
+    the ensemble fields are attached and are not recomputed from the ensemble direction.
     """
     import concurrent.futures
 
@@ -324,7 +327,7 @@ def _run_ml_prediction(state: BriefState) -> dict:
     except Exception as exc:
         logger.warning("ML prediction failed for %s: %s", ticker, exc)
     finally:
-        executor.shutdown(wait=False, cancel_futures=True)  # don't block pipeline
+        executor.shutdown(wait=False, cancel_futures=True)  # stop waiting; a running worker is not cancelled
 
     if ml is not None and ml.direction is not None and not ml.prediction_skipped:
         llm_dir = REC_TO_DIRECTION.get(brief.recommendation)
@@ -379,7 +382,7 @@ def _synthesize(state: BriefState) -> dict:
     failed = state.get("failed_agents", [])
     if failed:
         logger.warning("Synthesis proceeding with %d failed agents: %s", len(failed), failed)
-    if len(failed) >= 4:  # synthesis needs at least two of the five agents
+    if len(failed) >= 4:  # four or more agents raised; the count of usable outputs is checked below
         errors_msg = "; ".join(
             f"{agent}: {state.get('agent_errors', {}).get(agent, 'unknown error')}" for agent in failed
         )
@@ -392,6 +395,8 @@ def _synthesize(state: BriefState) -> dict:
     populated = [k for k, v in agent_outputs.items() if v is not None]
     if not populated:
         raise RuntimeError(f"All agents failed for {ticker} — cannot synthesize without data")
+    if len(populated) < 2:
+        raise RuntimeError(f"Only {len(populated)} of 5 agents produced output for {ticker}; synthesis needs two")
     if len(populated) < 5:
         logger.warning("Only %d/5 agents available for %s: %s", len(populated), ticker, populated)
     _news = state.get("news")
@@ -625,7 +630,6 @@ def invoke_pipeline(ticker: str) -> tuple[InvestmentBrief, dict]:
             "positioning": None,
             "company_info": None,
             "brief": None,
-            "ml_prediction": None,
             "news": None,
             "factor_loadings": None,
             "failed_agents": [],

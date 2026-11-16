@@ -27,6 +27,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
 
 from aer.demo.control_v3 import CellV3, analyse  # noqa: E402
+from aer.demo.prereg_v3 import SIGNALS as PREREG_SIGNALS  # noqa: E402
 
 DATA_DIR = ROOT / "docs" / "data"
 IMG_DIR = ROOT / "docs" / "img"
@@ -395,18 +396,24 @@ def _seed_count_text(result: dict[str, Any]) -> str:
 
 
 def control_v3_section() -> str:
-    result = analyse(read_cells_v3())
+    cells = read_cells_v3()
+    # the analysis takes its signal family from the rows it is given, so a signal with no rows would vanish
+    absent = sorted(set(PREREG_SIGNALS) - {c.signal for c in cells})
+    if absent:
+        raise ValueError(f"pre-registered signal strengths with no rows in the data: {absent}")
+    result = analyse(cells)
     signals = sorted(result["paired_gap"])
     primary = "".join(_primary_row(s, result) for s in signals)
     secondary = "".join(_secondary_row(s, result) for s in signals)
     delta, alpha = result["delta"], result["alpha"]
     pct = f"{result['equivalence_zero_signal']['interval_confidence'] * 100:.0f}%"
     gap_confidence = next((g["interval_confidence"] for g in result["paired_gap"].values()), 1 - alpha)
-    cells = read_cells_v3()
     at_chance = sum(1 for c in cells if c.model_balanced_accuracy == CHANCE)
     return (
         '<section id="control-v3"><h2>Control experiment, version 3 (pre-registered)</h2>'
-        "<p>This control scores the deployed ensemble on seeds disjoint from version 2. The specification "
+        "<p>This control scores the calibrated ensemble on seeds disjoint from version 2, on every seed whether "
+        "or not the gate passed, so the endpoints describe the estimator and not the system with abstention. "
+        "The specification "
         "(<code>docs/prereg/control-v3.md</code>) was released in a public commit holding the whole code tree, "
         "and the sha256 of the specification and its two analysis files was posted in public issue 1, before "
         "the first public commit of the results. The hashes cover those three files only; the generator, "
@@ -425,7 +432,7 @@ def control_v3_section() -> str:
         "for the zero-cost sign problem, so the gaps are descriptive.</p>"
         '<table id="control-v3-primary"><caption>Pre-registered primary endpoints</caption>'
         '<thead><tr><th scope="col">Signal</th><th scope="col">Seeds</th><th scope="col">Mean</th>'
-        '<th scope="col">Interval or one-sided lower bound</th>'
+        f'<th scope="col">Interval, or individual one-sided {(1 - alpha) * 100:.0f}% lower bound (not adjusted)</th>'
         '<th scope="col">Margin or Holm-adjusted p</th><th scope="col">Verdict</th></tr></thead>'
         f"<tbody>{primary}</tbody></table>"
         '<table id="control-v3-secondary"><caption>Secondary and descriptive</caption>'
@@ -508,19 +515,27 @@ def _tally(rows: Sequence[dict[str, str]]) -> tuple[int, int, int, int]:
     return bullish, bullish_correct, bearish, bearish_correct
 
 
-def baseline_bounds(rows: Sequence[dict[str, str]]) -> dict[str, tuple[float, float]]:
+def outcome_counts(rows: Sequence[dict[str, str]]) -> tuple[int, int]:
+    """Resolved actionable calls followed by an up move and by a down move.
+
+    Recorded calls are scored by direction at zero: a BUY is correct on an up move and a SELL or AVOID on a down
+    move, with no cost band. A wrong BUY therefore fixes the outcome as down and a wrong SELL or AVOID as up.
+    """
     b, bc, s, sc = _tally(rows)
-    n = b + s
-    if n == 0:
+    if b + s == 0:
         raise ValueError("no resolved actionable calls")
-    wrong_buys, wrong_sells = b - bc, s - sc
+    return bc + (s - sc), sc + (b - bc)
+
+
+def baselines(rows: Sequence[dict[str, str]]) -> dict[str, float]:
+    """Accuracy of each simple rule on the resolved actionable calls, exact under the recorded scoring rule."""
+    b, _, s, _ = _tally(rows)
+    up, down = outcome_counts(rows)
+    n = b + s
     return {
-        "always_bearish": (sc / n, (sc + wrong_buys) / n),
-        "always_bullish": (bc / n, (bc + wrong_sells) / n),
-        "class_matched_random": (
-            (b / n) * (bc / n) + (s / n) * (sc / n),
-            (b / n) * ((bc + wrong_sells) / n) + (s / n) * ((sc + wrong_buys) / n),
-        ),
+        "always_bearish": down / n,
+        "always_bullish": up / n,
+        "class_matched_random": (b / n) * (up / n) + (s / n) * (down / n),
     }
 
 
@@ -554,26 +569,26 @@ def baselines_section() -> str:
     n, correct = b + s, bc + sc
     accuracy = correct / n
     interval = wilson_interval(correct, n)
-    bounds = baseline_bounds(rows)
+    rates = baselines(rows)
+    up, down = outcome_counts(rows)
     confidence = f"{CONFIDENCE:.0%}"
-    bound_rows = (
-        f'<tr><td>Recorded calls</td><td class="n">{accuracy:.3f}</td>' f'<td class="n">{accuracy:.3f}</td></tr>'
-    )
-    bound_rows += "".join(
-        f'<tr><td>{label}</td><td class="n">{bounds[key][0]:.3f}</td>' f'<td class="n">{bounds[key][1]:.3f}</td></tr>'
+    counts = {"always_bearish": f"{down:,}", "always_bullish": f"{up:,}", "class_matched_random": "n/a"}
+    baseline_rows = f'<tr><td>Recorded calls</td><td class="n">{correct:,}</td><td class="n">{accuracy:.3f}</td></tr>'
+    baseline_rows += "".join(
+        f'<tr><td>{label}</td><td class="n">{counts[key]}</td><td class="n">{rates[key]:.3f}</td></tr>'
         for key, label in BASELINE_LABELS
     )
-    bearish_upper = bounds["always_bearish"][1]
-    if accuracy < bearish_upper:
+    bearish = rates["always_bearish"]
+    if accuracy < bearish:
         verdict = (
-            f"The recorded accuracy of {accuracy:.3f} is below the upper bound of the always-bearish baseline "
-            f"({bearish_upper:.3f}), so the published counts cannot rule out that an always-bearish rule "
-            "scores at least as well."
+            f"The recorded accuracy of {accuracy:.3f} is below the always-bearish rule ({bearish:.3f}): on these "
+            "calls, always saying down scores higher. The two differ only on the "
+            f"{b:,} BUY calls, of which {b - bc:,} were followed by a down move."
         )
     else:
         verdict = (
-            f"The recorded accuracy of {accuracy:.3f} is not below the upper bound of the always-bearish "
-            f"baseline ({bearish_upper:.3f}), so an always-bearish rule cannot score higher."
+            f"The recorded accuracy of {accuracy:.3f} is not below the always-bearish rule ({bearish:.3f}) on "
+            "these calls."
         )
     effect_rows = "".join(
         f'<tr><td class="n">{r.effect:g}</td><td class="n">{r.effective_n:.1f}</td>'
@@ -591,14 +606,17 @@ def baselines_section() -> str:
         '<thead><tr><th scope="col">Recommendation</th><th scope="col">Resolved</th><th scope="col">Correct</th>'
         f'<th scope="col">Accuracy</th><th scope="col">{confidence} Wilson interval</th></tr></thead>'
         f"<tbody>{rec_rows}</tbody></table>"
-        '<table id="baselines"><caption>Baselines, as bounds computable from the published counts</caption>'
-        '<thead><tr><th scope="col">Rule</th><th scope="col">Lower bound</th><th scope="col">Upper bound</th>'
-        f"</tr></thead><tbody>{bound_rows}</tbody></table>"
-        "<p>The published counts give bounds, not point values, because an incorrect call does not reveal "
-        "whether the move was in the opposite direction or inside the cost band. Exact baselines need one "
-        "further whole-sample aggregate: the counts of forward returns above the cost, below minus the cost "
-        "and inside the band. That aggregate carries no ticker, week or date dimension. "
-        f"{verdict}</p>"
+        '<table id="baselines"><caption>Simple rules on the same resolved calls</caption>'
+        '<thead><tr><th scope="col">Rule</th><th scope="col">Correct</th><th scope="col">Accuracy</th>'
+        f"</tr></thead><tbody>{baseline_rows}</tbody></table>"
+        "<p>Recorded calls are scored by direction: the outcome is up when the five-day return is above zero "
+        "and down otherwise, a BUY is correct on an up move and a SELL or AVOID on a down move "
+        "(<code>src/aer/evaluation/weekly_scorer.py</code>). There is no cost band, so a wrong call fixes the "
+        f"direction of the move and the published counts give each rule exactly: {down:,} of the {n:,} resolved "
+        f"calls were followed by a down move and {up:,} by an up move. The class-matched random rule says "
+        "bullish with the recorded share of bullish calls, independently of the outcome, and its figure is an "
+        f"expected accuracy. {verdict} The comparison is descriptive: the calls are dependent, as the next "
+        "table explains, and the direction split is that of one period.</p>"
         '<table id="design-effect"><caption>Sensitivity of the accuracy interval to dependence between '
         "calls</caption>"
         '<thead><tr><th scope="col">Design effect</th><th scope="col">Effective calls</th>'
@@ -608,7 +626,7 @@ def baselines_section() -> str:
         "market move, so the independent count is lower than the nominal count. A design effect of d divides "
         "the effective count by d. The published data carry no ticker or date, so the effect cannot be "
         "estimated here; the rows are assumed scenarios, not a measured range. The 0.50 line is also not "
-        "the no-skill rate for these calls, which the baseline bounds above describe.</p>"
+        "the no-skill rate for these calls, which the baselines above describe.</p>"
         '<p class="source">Source: <code>docs/data/eval_recommendation.csv</code></p></section>'
     )
 

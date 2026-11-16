@@ -7,7 +7,9 @@
   notes\runs\requests\*.request it calls tools\cycle.ps1 with the action named in the file, then moves the request to
   notes\runs\requests\processed\ and leaves the outcome in notes\runs\results\<name>.result.
   A request file holds lines of the form key=value. Keys: action (check, land, control-one, control), landing (a file name
-  under notes\landing, required for land), lock (true to run uv lock first), fix (false to skip the black and ruff --fix step that otherwise runs first). Anything else is rejected and nothing runs.
+  under notes\landing, required for land), lock (true to run uv lock first), fix (false to skip the black and ruff --fix step that otherwise runs first). A request with an unknown action, a bad
+  landing name, or a landing on an action that does not land is rejected and nothing runs. Unknown keys and lines
+  without an equals sign are ignored.
   The watcher never changes repository visibility, never runs a command taken from a request, and never lands more than
   20 files without Adi (land.ps1 refuses in that case and asks for a manual run).
 #>

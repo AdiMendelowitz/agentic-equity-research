@@ -1,7 +1,8 @@
-"""The single frozen definition of what the evaluation scores, shared by the scorer and the report.
+"""The frozen scoring definition for synthetic demo output, with the horizon and resolution lag the scorer uses.
 
-The per-recommendation resolution rules apply to synthetic demo output; the published whole-sample aggregates were
-not re-scored with them, because the HOLD rule was defined after those aggregates were seen.
+The per-recommendation resolution rules here apply to synthetic demo output only. Recorded calls are scored by
+aer.evaluation.weekly_scorer, by direction at zero with no cost term, and the published whole-sample aggregates were
+not re-scored with these rules, because the HOLD rule was defined after those aggregates were seen.
 """
 
 from typing import Literal

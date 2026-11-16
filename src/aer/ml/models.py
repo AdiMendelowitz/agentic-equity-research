@@ -301,6 +301,9 @@ def fit_ensemble(feature_df: pd.DataFrame) -> FittedEnsemble | None:
     # Model selection: higher mean F1 wins; tie → logistic (lighter, faster)
     use_lgbm = lgbm_cv.f1_scores.mean() > logreg_cv.f1_scores.mean()
     model_used = "lightgbm" if use_lgbm else "logistic"
+    # The gate and the out-of-fold Brier score below describe this selected single model. The pipeline then
+    # reports the LightGBM member's prediction with the two-model ensemble probability beside it, so passing
+    # the gate does not show that the ensemble meets the criteria.
     best_cv = lgbm_cv if use_lgbm else logreg_cv
     best_mean = float(best_cv.f1_scores.mean())
     best_std = float(best_cv.f1_scores.std())
@@ -409,7 +412,8 @@ def train_and_predict(feature_df: pd.DataFrame, ticker: str) -> tuple["MLPredict
 
     brier_score_raw = ens.oof_brier
 
-    # Verification on the holdout block: no fit, including the calibrator, has seen these rows
+    # Diagnostic on the holdout block, which no fit, including the calibrator, has seen. The comparison is
+    # logged only: it is not returned and it gates nothing.
     if ens.holdout_brier is not None:
         brier_lgbm = ens.holdout_brier["lgbm"]
         brier_logistic = ens.holdout_brier["logistic"]
@@ -426,13 +430,15 @@ def train_and_predict(feature_df: pd.DataFrame, ticker: str) -> tuple["MLPredict
     else:
         logger.warning("Brier check unavailable for %s", ticker)
 
-    # Persist model with calibrator key (backward-compatible; None if calibration failed)
+    # Persist the selected single model, not the ensemble. The calibrator was fitted on LightGBM probabilities,
+    # so it is stored only beside the LightGBM pipeline (None otherwise, or if calibration failed).
     today_str = date.today().isoformat()
     model_path = MODEL_DIR / f"{ticker}_{today_str}.joblib"
+    saved_calibrator = calibrator if model_used == "lightgbm" else None
     _atomic_save_model(
         ticker,
         model_path,
-        {"pipeline": best_pipe, "features": available_features, "calibrator": calibrator},
+        {"pipeline": best_pipe, "features": available_features, "calibrator": saved_calibrator},
     )
     _cleanup_old_models(ticker)
 

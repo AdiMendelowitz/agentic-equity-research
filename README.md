@@ -11,14 +11,14 @@
 > [!NOTE]
 > A research demonstration, not investment advice and not a trading system. By default it runs offline on synthetic data and makes no model call.
 
-**[Evaluation report](https://adimendelowitz.github.io/agentic-equity-research/)**, rebuilt from `docs/data` on every push, with the hash of each input in its footer.
+**[Evaluation report](https://adimendelowitz.github.io/agentic-equity-research/)**, rebuilt from `docs/data` on every push by its own workflow, with the hash of each input in its footer.
 
 [Results](#results-at-a-glance) · [Quick start](#quick-start) · [How it works](#how-it-works) · [Evaluation](#what-the-evaluation-found) · [Control experiment](#does-the-harness-detect-a-signal-that-exists) · [Tests](#what-the-tests-check) · [Limits](#limits) · [Roadmap](#roadmap)
 
 ## Results at a glance
 
-- **No measurable edge on recorded output.** 342 of 707 resolved calls were correct (0.484, about 0.45 to 0.52), and detecting 0.55 against 0.50 would need about 783 independent calls.
-- **The harness detects a signal that exists, under a known generator.** In a pre-registered control on synthetic prices, the deployed calibrated ensemble scores balanced accuracy 0.530 and 0.565 at the two non-zero signal strengths, both above 0.50 after a Holm adjustment, and stays within 0.03 of chance at zero signal. A rule that thresholds the true conditional mean is 0.104 and 0.145 ahead.
+- **No measurable edge on recorded output.** 342 of 707 resolved calls were correct (0.484, about 0.45 to 0.52), and detecting 0.55 against 0.50 would need about 783 independent calls. A rule that always says down scores 390 of 707 (0.552) on the same calls.
+- **The harness detects a signal that exists, under a known generator.** In a pre-registered control on synthetic prices, the calibrated ensemble, scored on every seed whether or not the gate passed, reaches balanced accuracy 0.530 and 0.565 at the two non-zero signal strengths, both above 0.50 after a Holm adjustment, and stays within 0.03 of chance at zero signal. A rule that thresholds the true conditional mean is 0.104 and 0.145 ahead.
 - **The ML gate barely separates signal from noise.** In that control it passed in 4 of 46 seeds with no signal and 11 of 46 at the strongest, a descriptive count and not a tested endpoint; a conformal gate is the next candidate, to be tested against matched-coverage selection.
 - **The multi-agent design is not yet justified by evidence.** Nothing here compares the five agents with one well-prompted model on the same data; that comparison is on the roadmap.
 
@@ -76,7 +76,7 @@ Blue boxes are deterministic code, lavender the agents, rose the synthesis model
 - **Cost-governed routing.** A four-step provider cascade that reaches the paid model only when the free options fail or a prompt exceeds their context limit, with a ledger that counts calls without usage instead of estimating them, in `src/aer/utils/llm_client.py` and `src/aer/utils/usage_meter.py`.
 - **Python-first signals.** Thresholds and classifications run as deterministic code before any model call, in `src/aer/indicators/` and `src/aer/utils/python_replacements.py`.
 - **ML layer.** LightGBM and logistic regression with purged time-series cross-validation, Platt calibration and a gate that abstains, in `src/aer/ml/`.
-- **Evaluation.** An evaluation spec with a resolution rule for every output class, and power arithmetic, in `src/aer/evaluation/`.
+- **Evaluation.** A scorer for recorded calls (direction of the five-day move, `weekly_scorer.py`), a scoring spec with a resolution rule for every output class of the synthetic demo, and power arithmetic, in `src/aer/evaluation/`.
 - **Operations.** A prefetch manifest, a run heartbeat and run history, in `src/aer/prefetch/`, `src/aer/utils/pipeline_heartbeat.py` and `docs/data/run_history.csv`, where 22 of 29 scheduled runs completed with exit code 0.
 
 ## What the evaluation found
@@ -92,7 +92,7 @@ Detecting a hit rate of 0.55 against 0.50 with 80% power at a two-sided 5% level
 <details>
 <summary>Results by conviction, recommendation and ML gate (descriptive only)</summary>
 
-By conviction bin, the 0.6 bin scored 135 of 305 (0.443), the 0.7 bin 186 of 349 (0.533) and the 0.8 bin 19 of 48 (0.396). By recommendation, BUY scored 114 of 276 (0.413), SELL 121 of 246 (0.492) and AVOID 107 of 185 (0.578). All 1,766 HOLD rows were never resolved. The ML gate predicted on 169 of 2,374 rows, and 74 of the 145 resolved predictions were correct (0.510).
+By conviction bin, the 0.6 bin scored 135 of 305 (0.443), the 0.7 bin 186 of 349 (0.533) and the 0.8 bin 19 of 48 (0.396). By recommendation, BUY scored 114 of 276 (0.413), SELL 121 of 246 (0.492) and AVOID 107 of 185 (0.578). All 1,766 HOLD rows were never resolved. The ML gate predicted on 169 of 2,374 rows, and 74 of the 145 resolved predictions were correct (0.510); those recorded predictions are the LightGBM member's direction, not the calibrated ensemble that the control scores.
 
 </details>
 
@@ -100,7 +100,7 @@ By conviction bin, the 0.6 bin scored 135 of 305 (0.443), the 0.7 bin 186 of 349
 
 A null result means little unless the harness can find a signal when one is there. The control injects a signal of strength s into synthetic prices (1,500 sessions per seed) and scores balanced accuracy, whose expected value without skill is 0.50 at any class balance.
 
-The current control, version 3, is pre-registered. It scores the deployed calibrated ensemble on 46 fresh seeds per strength. Its specification, `docs/prereg/control-v3.md`, was released in a public commit and hashed in [issue 1](https://github.com/AdiMendelowitz/agentic-equity-research/issues/1) before the first public commit of the results; the seed count comes from a power calculation for a margin of 0.03.
+The current control, version 3, is pre-registered. It scores the calibrated ensemble on 46 fresh seeds per strength, on every seed whether or not the gate passed, so it measures the estimator and not the system with abstention. Its specification, `docs/prereg/control-v3.md`, was released in a public commit and hashed in [issue 1](https://github.com/AdiMendelowitz/agentic-equity-research/issues/1) before the first public commit of the results; the seed count comes from a power calculation for a margin of 0.03.
 
 | Signal strength s | Model balanced accuracy | Pre-registered test | Verdict | Gate passed |
 | --- | --- | --- | --- | --- |
@@ -134,24 +134,28 @@ The first run failed as a design and stays on record in `docs/data/detection_cur
 ## What the tests check
 
 - **Leakage.** `tests/ml/test_leakage.py` covers label alignment, future-bar mutation and purge-gap geometry. `tests/test_models_fixes.py` checks the purge gap before the holdout block, that no holdout row reaches any fit, and that the logged Brier score is out of fold.
-- **Hermetic imports.** `tests/test_hermetic.py` imports every module with no network, database or credentials.
+- **Hermetic imports.** `tests/test_hermetic.py` imports every module in a fresh process with Python socket connections refused and no database file or credentials.
 - **Data gates.** `tests/test_gates.py` checks the published data schemas and keeps the demo package out of ML and evaluation code.
 - **Publication checks.** A redaction scan (`tools/redact_check.py`), a secrets scan (gitleaks) and a licence audit that fails on GPL and AGPL licence names in the locked environment run in CI.
 - **Pre-registered analysis.** `tests/test_control_v3.py` pins the equivalence, Holm and paired-gap rules on hand-built cases and checks that the specification text states the same constants as the code.
-- **Types.** mypy runs in CI against a ceiling of 63 known errors (`tools/mypy_ratchet.py`); the count may fall and may not rise.
+- **Types.** mypy runs in CI against a fixed ceiling of 62 known errors (`tools/mypy_ratchet.py`). A run above the ceiling fails; the ceiling is lowered by hand as errors are fixed, and it compares counts, not which errors.
 - **Versions.** CI runs the test suite and a blocking offline demo on Python 3.12, 3.13 and 3.14.
 
 ## Limits
 
 - No real evaluation observation is published at row level, and the evaluation aggregates carry no ticker, week or date dimension. Synthetic control rows and run dates are published.
 - Up to v0.1.2 the ML layer had three leakage defects, fixed in v0.1.3 with a test each. The calibration block followed the training block with no purge gap. The logged Brier score was computed on rows the model was fitted on. The Brier check scored the calibrated ensemble on the rows its calibrator was fitted on. Calibration is now fitted on out-of-fold predictions, and a purged holdout block is used only for evaluation.
-- Control version 2 measures one uncalibrated classifier per seed, not the deployed ensemble; version 3 measures the ensemble. In version 3 the model scores slightly above 0.50 on pure noise, within the pre-registered margin. In the exploratory analysis the pooled balanced accuracy is at most 0.009 above 0.50 at the upper end of its 95% interval; that bounds this statistic, not every form of dependence, and the cause is not identified.
+- Control version 2 measures one uncalibrated classifier per seed, not the deployed ensemble; version 3 measures the ensemble with the gate's abstention not applied. In version 3 the model scores slightly above 0.50 on pure noise, within the pre-registered margin. In the exploratory analysis the pooled balanced accuracy is at most 0.009 above 0.50 at the upper end of its 95% interval; that bounds this statistic, not every form of dependence, and the cause is not identified.
 - Samples are small, with 707 resolved calls and 145 resolved ML predictions.
 - Only the LightGBM member of the ensemble is Platt-calibrated, the logged out-of-fold Brier score belongs to the model chosen on the same folds, and the version 3 seed count was planned from version 2 variability, which the strongest signal slightly exceeded.
 - The control's oracle thresholds the true conditional mean at the cost and is not the rule that maximises balanced accuracy; the analytic ceiling is for the zero-cost sign problem.
 - The control experiment uses one synthetic signal family; it shows the harness can find that signal, not that real prices carry one.
 - The control's expectations were fixed before its results in the private development history; each release here is a single commit, so that order cannot be checked from this repository. That applies to versions 1 and 2. From version 3 the specification is released in a public commit, and its hash posted in a public issue, before the first public commit of the results. The hashes for version 3 cover three files; the code they import is fixed by the release commit, and the start of the run is recorded only in a local log.
 - The agents emit analysis and a confidence, not a directional call. Each per-agent opinion row therefore stores the synthesis recommendation, so a per-agent hit rate from those rows measures the synthesis and not the agent.
+- The specification's own wording, that it was fixed before the run, claims more than this repository can show; the item above states what can be checked. Its lower bounds at the non-zero signals are individual one-sided bounds, not adjusted, beside Holm-adjusted p-values.
+- Recorded calls are scored by direction at zero on adjusted closes, while the ML label is a five-day return above a 10 basis point cost on unadjusted closes, so the recorded ML accuracy and the training target are not the same quantity.
+- The gate applies its cross-validation criteria to the better single model, while the brief then carries the LightGBM member's prediction with the two-model ensemble probability beside it. The holdout Brier comparison is logged as a diagnostic and gates nothing.
+- The report page is deployed by its own workflow after the report tests and the redaction scan; it does not wait for the main CI run.
 - Briefs are scored against a five-day move, while the underlying thesis spans weeks to months.
 - The published aggregates were not re-scored with the HOLD rule, which was defined after they were seen.
 - `numba` is overridden in `pyproject.toml` so that `pandas-ta` resolves on Python 3.14.
@@ -161,7 +165,6 @@ The first run failed as a design and stays on record in `docs/data/detection_cur
 
 Planned next:
 
-- Exact baselines for the recorded calls, which need one further whole-sample aggregate of forward-return directions.
 - An oracle check with the same target and threshold as the analytic ceiling, and a cause for the unexplained control result in the exploratory zero-signal analysis.
 - Dependence-aware intervals for the live evaluation, with the method published.
 - A conformal gate tested against matched-coverage selection, and a single-agent against multi-agent comparison.

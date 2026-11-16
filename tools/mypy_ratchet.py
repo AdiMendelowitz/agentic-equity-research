@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-MAX_ERRORS = 63
+MAX_ERRORS = 62
 _FOUND = re.compile(r"^Found (\d+) errors? in \d+ files?", re.M)
 _CLEAN = re.compile(r"^Success: no issues found", re.M)
 
