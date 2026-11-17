@@ -40,6 +40,8 @@
 | Pre-registration | Specification and analysis code hashed in a public issue before the first results commit | `docs/prereg/control-v3.md`, [issue 1](https://github.com/AdiMendelowitz/agentic-equity-research/issues/1) |
 | Reproducibility | Report and figures rebuilt from `docs/data` on every push, input hashes in the page footer, byte-identical figure builds tested | `docs/report/`, `.github/workflows/pages.yml` |
 | Release safety | Hermetic imports with sockets refused, redaction scan, gitleaks, licence audit and a mypy ceiling | `tests/test_hermetic.py`, `tools/` |
+| Backtesting | A vectorised daily engine with next-day execution, explicit round-trip costs and empyrical metrics, written without `backtrader` | `src/aer/backtesting/`, `tests/backtesting/` |
+| Decisions | Five architecture decision records, each naming the tests that enforce it | [`docs/adr/`](docs/adr/README.md) |
 
 Every change is checked locally, released from a private repository as one exported commit, and checked again in public CI.
 
@@ -322,6 +324,7 @@ The first run failed as a design and stays on record in `docs/data/detection_cur
 - **Publication checks.** A redaction scan (`tools/redact_check.py`), a secrets scan (gitleaks) and a licence audit that fails on GPL and AGPL licence names in the locked environment run in CI.
 - **Pre-registered analysis.** `tests/test_control_v3.py` pins the equivalence, Holm and paired-gap rules on hand-built cases and checks that the specification text states the same constants as the code.
 - **Figures and README.** `tests/test_report_figures.py` rebuilds every figure twice and requires byte-identical output that matches the committed files. `tests/test_readme_figures.py` checks that the README figures use the pre-registered intervals and the code's fold layout, and that the counts in this README match the data they are drawn from.
+- **Backtesting.** `tests/backtesting/test_engine.py` checks next-day execution, the cost of an entry, an exit and a flip, metrics against hand-computed values, and that changing a later price leaves every earlier result unchanged.
 - **Types.** mypy runs in CI against a fixed ceiling of 62 known errors (`tools/mypy_ratchet.py`). A run above the ceiling fails; the ceiling is lowered by hand as errors are fixed, and it compares counts, not which errors.
 - **Versions.** CI runs the test suite and a blocking offline demo on Python 3.12, 3.13 and 3.14.
 

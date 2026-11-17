@@ -170,7 +170,8 @@ EXCLUDED_MODULES: tuple[str, ...] = (
     "alerts/models.py",
     "alerts/pm_divergence.py",
     "alerts/social_consensus.py",
-    "backtesting/__init__.py",
+    # backtesting/__init__.py left this list when the rewritten engine landed (no backtrader; see the import check
+    # in test_excluded_modules_absent); the backtrader-based modules below stay excluded.
     "backtesting/harness.py",
     "backtesting/metrics.py",
     "backtesting/strategy.py",
