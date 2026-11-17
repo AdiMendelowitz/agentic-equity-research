@@ -13,6 +13,8 @@ ml_models/
 !uv.lock
 eval_log/
 logs/
+# scratch of the release, quick-start and landing checks; a passing run removes its own
+.scratch/
 # python
 __pycache__/
 *.py[cod]

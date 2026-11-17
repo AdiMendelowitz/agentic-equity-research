@@ -302,8 +302,8 @@ def fit_ensemble(feature_df: pd.DataFrame) -> FittedEnsemble | None:
     use_lgbm = lgbm_cv.f1_scores.mean() > logreg_cv.f1_scores.mean()
     model_used = "lightgbm" if use_lgbm else "logistic"
     # The gate and the out-of-fold Brier score below describe this selected single model. The pipeline then
-    # reports the LightGBM member's prediction with the two-model ensemble probability beside it, so passing
-    # the gate does not show that the ensemble meets the criteria.
+    # reports this model's prediction (selected_prediction) with the two-model ensemble probability beside it,
+    # so passing the gate does not show that the ensemble meets the criteria.
     best_cv = lgbm_cv if use_lgbm else logreg_cv
     best_mean = float(best_cv.f1_scores.mean())
     best_std = float(best_cv.f1_scores.std())
@@ -335,6 +335,16 @@ def fit_ensemble(feature_df: pd.DataFrame) -> FittedEnsemble | None:
         up_rate=float(y_cv.mean()),
     )
     return replace(ens, holdout_brier=_holdout_brier(ens, X_holdout, y_holdout))
+
+
+def selected_prediction(lgbm_ml: "MLPrediction", logistic_ml: "MLPrediction") -> "MLPrediction":
+    """Return the member the gate validated, by the rule fit_ensemble applies: higher mean CV F1, tie to logistic.
+
+    Each prediction carries its own model's mean CV F1, so the choice here is the one the gate was computed on.
+    """
+    f1_lgbm = lgbm_ml.cv_f1_macro if lgbm_ml.cv_f1_macro is not None else float("-inf")
+    f1_logistic = logistic_ml.cv_f1_macro if logistic_ml.cv_f1_macro is not None else float("-inf")
+    return lgbm_ml if f1_lgbm > f1_logistic else logistic_ml
 
 
 def train_and_predict(feature_df: pd.DataFrame, ticker: str) -> tuple["MLPrediction", "MLPrediction"] | None:
@@ -442,14 +452,15 @@ def train_and_predict(feature_df: pd.DataFrame, ticker: str) -> tuple["MLPredict
     )
     _cleanup_old_models(ticker)
 
+    selected_prob_up = lgbm_prob_up_raw if model_used == "lightgbm" else logreg_prob_up_raw
     logger.info(
         "%s: model=%s, mean_f1=%.3f, std_f1=%.3f, direction=%s, prob_up=%.3f, bars=%d",
         ticker,
         model_used,
         mean_f1,
         std_f1,
-        "UP" if lgbm_prob_up_raw >= 0.5 else "DOWN",
-        lgbm_prob_up_raw,
+        "UP" if selected_prob_up >= 0.5 else "DOWN",
+        selected_prob_up,
         n_bars,
     )
 

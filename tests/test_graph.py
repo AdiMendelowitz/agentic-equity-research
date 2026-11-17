@@ -406,6 +406,28 @@ class TestRunMLPredictionEnsemble:
         assert ml.ensemble_prob_up == pytest.approx(expected, abs=1e-6)
         assert ml.ensemble_direction == "UP"
         assert ml.agrees_with_llm is True
+        assert ml.model_used == "lightgbm"
+
+    def test_run_ml_prediction_stores_the_member_the_gate_validated(self, tmp_path) -> None:
+        """When logistic regression has the higher CV F1, the brief carries its prediction, not LightGBM's."""
+        from aer.data.cache import Cache
+        from aer.graph import _run_ml_prediction
+
+        lgbm_pred = self._lgbm_pred().model_copy(update={"cv_f1_macro": 0.52})
+        logistic_pred = self._logistic_pred().model_copy(update={"direction": "DOWN", "prob_up_raw": 0.42})
+        state = _make_ml_state()
+        cache = Cache(db_path=str(tmp_path / "ml_selected.db"))
+
+        with patch("aer.ml.models.train_and_predict", return_value=(lgbm_pred, logistic_pred)):
+            with patch("aer.ml.features.build_feature_matrix", return_value=MagicMock()):
+                with patch("aer.graph.agent_cache", return_value=cache):
+                    result = _run_ml_prediction(state)
+
+        ml = result["brief"].ml_prediction
+        assert ml is not None
+        assert ml.model_used == "logistic"
+        assert ml.direction == "DOWN"
+        assert ml.prob_up_raw == pytest.approx(0.42)
 
     def test_run_ml_prediction_skipped_returns_no_ensemble(self, tmp_path) -> None:
         """Both skipped → ensemble_prob_up stays None (compute_ensemble returns {})."""

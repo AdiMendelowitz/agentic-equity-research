@@ -5,7 +5,7 @@
   Dry run (default):  powershell -File tools\release.ps1
   Publish:            powershell -File tools\release.ps1 -Publish
   The private repository (agentic-equity-research-dev) keeps the full history and never becomes public. This script
-  exports the files tracked at HEAD into a folder under %LOCALAPPDATA%\aer-scratch, checks the export (no internal paths, gitleaks,
+  exports the files tracked at HEAD into .scratch in this folder (ignored by git), checks the export (no internal paths, gitleaks,
   redaction scan, fresh-environment quick start), and prints the file list. With -Publish it then asks for the word
   publish, places the export as a single new commit in the public repository and waits for its CI run.
   The public repository receives files only: no commit, branch, tag or Actions log of the private one.
@@ -24,11 +24,11 @@ New-Item -ItemType Directory -Force -Path $runs | Out-Null
 $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $log = Join-Path $runs "release-$stamp.log"
 $utf8 = New-Object System.Text.UTF8Encoding $false
-# scratch lives outside the repository and outside %TEMP%, which disk cleaners empty; runs older than two days go
-$scratch = Join-Path $env:LOCALAPPDATA "aer-scratch"
+# this script creates no scratch outside the project folder (uv keeps its own download cache): scratch is .scratch here, ignored by git; failed runs older than two days go
+$scratch = Join-Path $repo ".scratch"
 New-Item -ItemType Directory -Force -Path $scratch | Out-Null
-Get-ChildItem -Path $scratch -Directory -Filter "aer-release-*" | Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-2) } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-$work = Join-Path $scratch "aer-release-$stamp"
+Get-ChildItem -Path $scratch -Directory -Filter "rel-*" -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-2) } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+$work = Join-Path $scratch "rel-$stamp"
 $export = Join-Path $work "export"
 $public = Join-Path $work "public"
 $zip = Join-Path $work "tree.zip"
@@ -41,6 +41,14 @@ function Stop-Release([string]$why) {
   Write-Log @("", "RESULT: REFUSED: $why", "log: $log")
   Set-Location -Path $repo
   exit 1
+}
+function Remove-Scratch {
+  # a run that ends well leaves nothing behind; a refused or failed run keeps its folder as evidence
+  Set-Location -Path $repo
+  Remove-Item -Path $work -Recurse -Force -ErrorAction SilentlyContinue
+  $removed = -not (Test-Path -Path $work)
+  if (-not (Get-ChildItem -Path $scratch -Force -ErrorAction SilentlyContinue)) { Remove-Item -Path $scratch -Force -ErrorAction SilentlyContinue }
+  Write-Log @("scratch removed: $removed")
 }
 function Invoke-Logged([string]$commandLine) {
   Write-Log @("> $commandLine")
@@ -92,6 +100,7 @@ Copy-Item -Path $export -Destination $qs -Recurse
 if ((Invoke-Logged "powershell -NoProfile -File $repo\tools\quickstart.ps1 -Source $qs") -ne 0) { Stop-Release "quick start failed on the export" }
 
 if (-not $Publish) {
+  Remove-Scratch
   Write-Log @("", "RESULT: DRY RUN PASS ($($files.Count) files from private commit $head would be published as one commit)", "log: $log")
   exit 0
 }
@@ -105,6 +114,7 @@ if ($remoteHeads.Count -eq 0) {
   New-Item -ItemType Directory -Force -Path $public | Out-Null
   Set-Location -Path $public
   git --no-pager init --initial-branch main | Out-Null
+  if ($LASTEXITCODE -ne 0) { Stop-Release "git init failed in the public work folder; nothing was pushed" }
   git --no-pager remote add origin $PublicUrl
   $expectedCommits = 1
 } else {
@@ -114,6 +124,9 @@ if ($remoteHeads.Count -eq 0) {
   $expectedCommits = [int](git --no-pager rev-list --count HEAD) + 1
   Get-ChildItem -Path $public -Force | Where-Object { $_.Name -ne ".git" } | Remove-Item -Recurse -Force
 }
+# the work folder sits inside the private repository, so a missing .git here would send every command below to the private one
+$top = (git --no-pager rev-parse --show-toplevel)
+if (($top -replace "/", "\") -ne $public) { Stop-Release "the public work folder is not its own repository (git resolves to $top); nothing was pushed" }
 Copy-Item -Path (Join-Path $export "*") -Destination $public -Recurse -Force
 git --no-pager config user.email $email
 git --no-pager config user.name $name
@@ -186,6 +199,7 @@ if (Get-Command gh -ErrorAction SilentlyContinue) {
   $verified = "NOT VERIFIED, gh is not installed"
 }
 Set-Location -Path $repo
+if ($ciCode -eq 0) { Remove-Scratch }
 # the push has happened either way; the exit code and this line say whether it was verified
 Write-Log @("", "RESULT: PUBLISHED $sha ($($files.Count) files, $count commit(s) in the public repository); $verified", "log: $log")
 exit $ciCode

@@ -15,7 +15,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 SKIP_DIRS = {".git", ".venv", "notes", "__pycache__", ".cache", ".pytest_cache", ".ruff_cache", ".mypy_cache"}
 # gitignored output folders: skipped in a scan of the tree, scanned when one of them is named as the target
-SKIP_DIRS |= {"site", "artifacts", "logs", "eval_log", "build", "dist"}
+SKIP_DIRS |= {"site", "artifacts", "logs", "eval_log", "build", "dist", ".scratch"}
 SKIP_FILES = {"CLAUDE.md", ".env"}  # gitignored internal files; never part of the public tree
 PROSE_EXT = {
     ".md",

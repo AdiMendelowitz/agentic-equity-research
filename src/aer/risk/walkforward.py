@@ -1,26 +1,28 @@
 """Walk-forward out-of-sample validation: 5 expanding-window folds.
 
 Implements run_walk_forward(ticker, as_of_date) which:
-1. Fetches raw price history (split-adjusted, dividend-unadjusted)
-2. Checks sufficient history (>= 577 bars)
-3. Computes 5 expanding-window fold boundaries
+1. Fetches raw price history (split-adjusted, dividend-unadjusted) and drops every bar dated after as_of_date
+2. Checks sufficient history (>= 577 bars on or before as_of_date)
+3. Computes 5 expanding-window fold boundaries, the last OOS window ending at the last usable bar
 4. Generates signals per fold (IS-only history)
 5. Computes per-fold OOS Sharpe (long-only, long-short) and drawdown
 6. Fetches Fama-French factors per fold (graceful None on unavailability)
 7. Aggregates across folds (mean/std metrics, fold completion count)
 
 Fold geometry
- - IS window: expanding from start (bar 0) to growing end
- - Purge gap: 10-bar non-trading period post-IS
- - OOS window: fixed 55-bar window post-purge-gap
- - 5 folds total; Fold 0 uses minimum 252-bar IS window
+ - IS window: expanding from bar 0 to a growing end
+ - Purge gap: 10 bars dropped after the IS window
+ - OOS window: fixed 55-bar window after the purge gap
+ - 5 folds; the layout is anchored to the end of the history, so fold 4 ends at the last bar and fold 0 has at
+   least the 252-bar minimum IS window
  - Total minimum bars: 577
 
 Design:
  - Zero LLM calls: Python indicators only
  - MultiIndex adapter: wraps raw OHLCV for signal_generator.generate
  - Signal-price reconciliation both use raw prices from get_price_history_raw
- - Per-fold error tracking fold_error set on any exception; other folds complete
+ - Per-fold error tracking: fold_error is set on any exception, including a failed signal on any OOS bar, and
+   such a fold is not counted as completed; other folds complete
  - Per-fold factor data graceful None if Ken French absent; walk-forward continues
  - Seeding random.seed(42) at function entry for reproducibility
 """
@@ -56,20 +58,23 @@ except ImportError:
 
 
 def _compute_fold_boundaries(num_bars: int) -> list[tuple[int, int, int, int]]:
-    """Compute IS/OOS bar indices for 5 expanding-window folds.
+    """Compute IS/OOS bar indices for 5 expanding-window folds anchored to the end of the history.
 
     Args:
-    num_bars: Total number of bars available in price history.
+    num_bars: Total number of bars available in price history; at least TOTAL_MIN_BARS.
 
     Returns:
     List of (is_start_bar, is_end_bar, oos_start_bar, oos_end_bar) tuples.
     All indices are 0-based and inclusive of start, exclusive of end (Python slice semantics).
+    The last fold's OOS window ends at num_bars; bars beyond the minimum lengthen every IS window.
     """
+    if num_bars < TOTAL_MIN_BARS:
+        raise ValueError(f"{num_bars} bars is below the {TOTAL_MIN_BARS} the fold layout needs")
+    offset = num_bars - TOTAL_MIN_BARS
     folds = []
     for fold_idx in range(WFO_N_FOLDS):
-        # IS window: anchored at start (bar 0) to growing end
         is_start_bar = 0
-        is_end_bar = WFO_MIN_IS_BARS + fold_idx * (WFO_PURGE_GAP_BARS + WFO_OOS_SIZE_BARS)
+        is_end_bar = offset + WFO_MIN_IS_BARS + fold_idx * (WFO_PURGE_GAP_BARS + WFO_OOS_SIZE_BARS)
 
         # Purge gap: [is_end_bar, is_end_bar + WFO_PURGE_GAP_BARS)
         purge_end_bar = is_end_bar + WFO_PURGE_GAP_BARS
@@ -88,11 +93,11 @@ def run_walk_forward(ticker: str, as_of_date: date) -> WalkForwardResult:
 
     Args:
         ticker: Equity ticker symbol.
-        as_of_date: Snapshot date (passed to get_factor_loadings for time-consistency).
+        as_of_date: Snapshot date. Bars dated after it are dropped before the length check, so no fold sees them.
 
     Returns:
         WalkForwardResult with per-fold metrics, aggregates, and fold_error tracking.
-        Returns insufficient_history=True if total bars < 577; all metrics are None.
+        Returns insufficient_history=True if fewer than 577 bars fall on or before as_of_date; all metrics are None.
 
     Raises:
         None — all exceptions caught per-fold; fold_error field set on failure.
@@ -103,6 +108,8 @@ def run_walk_forward(ticker: str, as_of_date: date) -> WalkForwardResult:
     # Fetch raw price history raw prices matched to signal generation)
     try:
         price_history = get_price_history_raw(ticker)
+        on_or_before = np.fromiter((ts.date() <= as_of_date for ts in price_history.index), dtype=bool)
+        price_history = price_history.loc[on_or_before]
     except Exception as e:
         logger.error(f"Failed to fetch price history for {ticker}: {e}")
         return WalkForwardResult(
@@ -169,15 +176,12 @@ def run_walk_forward(ticker: str, as_of_date: date) -> WalkForwardResult:
 
                 # Call signal_generator.generate() with IS-only history
                 # (is_end_bar prevents OOS lookahead; is_history_multiindex contains [is_start:is_end] only)
+                # A failed signal fails the fold: substituting HOLD would score a flat position as a strategy result.
                 try:
                     signals = generate(is_history_multiindex, signal_date, [ticker])
-                    if signals and len(signals) > 0:
-                        oos_signals.append(signals[0].action)
-                    else:
-                        oos_signals.append("HOLD")
                 except Exception as sig_err:
-                    logger.warning(f"Signal generation failed for {ticker} at {signal_date}: {sig_err}")
-                    oos_signals.append("HOLD")
+                    raise RuntimeError(f"signal generation failed at {signal_date}: {sig_err}") from sig_err
+                oos_signals.append(signals[0].action if signals else "HOLD")
 
             # Compute OOS returns (daily returns from closing prices)
             oos_close = oos_history["Close"]

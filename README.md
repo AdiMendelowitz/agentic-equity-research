@@ -1,6 +1,6 @@
 # agentic-equity-research
 
-**A multi-agent LLM equity-research pipeline with cost-governed model routing, deterministic signal code, a calibrated ML gate that can abstain, and an evaluation that reports what it can and cannot detect.**
+**A multi-agent LLM equity-research pipeline with cost-governed model routing, deterministic signal code, a cross-validated ML gate that can abstain, and an evaluation that reports what it can and cannot detect.**
 
 [![CI](https://github.com/AdiMendelowitz/agentic-equity-research/actions/workflows/ci.yml/badge.svg)](https://github.com/AdiMendelowitz/agentic-equity-research/actions/workflows/ci.yml)
 [![Python 3.12 to 3.14](https://img.shields.io/badge/python-3.12%20%7C%203.13%20%7C%203.14-3776AB?logo=python&logoColor=white)](pyproject.toml)
@@ -18,7 +18,7 @@
 ## Results at a glance
 
 - **No measurable edge on recorded output.** 342 of 707 resolved calls were correct (0.484, about 0.45 to 0.52), and detecting 0.55 against 0.50 would need about 783 independent calls. A rule that always says down scores 390 of 707 (0.552) on the same calls.
-- **The harness detects a signal that exists, under a known generator.** In a pre-registered control on synthetic prices, the calibrated ensemble, scored on every seed whether or not the gate passed, reaches balanced accuracy 0.530 and 0.565 at the two non-zero signal strengths, both above 0.50 after a Holm adjustment, and stays within 0.03 of chance at zero signal. A rule that thresholds the true conditional mean is 0.104 and 0.145 ahead.
+- **The harness detects a signal that exists, under a known generator.** In a pre-registered control on synthetic prices, the two-model ensemble (only its LightGBM member is Platt-calibrated), scored on every seed whether or not the gate passed, reaches balanced accuracy 0.530 and 0.565 at the two non-zero signal strengths, both above 0.50 after a Holm adjustment, and stays within 0.03 of chance at zero signal. The zero-signal mean is itself 0.516, and the lower bound at 0.3 (0.519) lies inside the zero-signal interval, so only the strongest signal is clearly apart from the noise result. A rule that thresholds the true conditional mean is 0.104 and 0.145 ahead.
 - **The ML gate barely separates signal from noise.** In that control it passed in 4 of 46 seeds with no signal and 11 of 46 at the strongest, a descriptive count and not a tested endpoint; a conformal gate is the next candidate, to be tested against matched-coverage selection.
 - **The multi-agent design is not yet justified by evidence.** Nothing here compares the five agents with one well-prompted model on the same data; that comparison is on the roadmap.
 
@@ -154,7 +154,7 @@ The first run failed as a design and stays on record in `docs/data/detection_cur
 - The agents emit analysis and a confidence, not a directional call. Each per-agent opinion row therefore stores the synthesis recommendation, so a per-agent hit rate from those rows measures the synthesis and not the agent.
 - The specification's own wording, that it was fixed before the run, claims more than this repository can show; the item above states what can be checked. Its lower bounds at the non-zero signals are individual one-sided bounds, not adjusted, beside Holm-adjusted p-values.
 - Recorded calls are scored by direction at zero on adjusted closes, while the ML label is a five-day return above a 10 basis point cost on unadjusted closes, so the recorded ML accuracy and the training target are not the same quantity.
-- The gate applies its cross-validation criteria to the better single model, while the brief then carries the LightGBM member's prediction with the two-model ensemble probability beside it. The holdout Brier comparison is logged as a diagnostic and gates nothing.
+- The gate applies its cross-validation criteria to the better single model, and from this release the brief carries that model's prediction, with the two-model ensemble probability beside it. The 145 published ML predictions were recorded under the earlier rule, which kept the LightGBM member's direction whichever model the gate chose. The holdout Brier comparison is logged as a diagnostic and gates nothing.
 - The report page is deployed by its own workflow after the report tests and the redaction scan; it does not wait for the main CI run.
 - Briefs are scored against a five-day move, while the underlying thesis spans weeks to months.
 - The published aggregates were not re-scored with the HOLD rule, which was defined after they were seen.

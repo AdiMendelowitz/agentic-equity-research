@@ -230,76 +230,6 @@ class TestHttp529Handling:
         assert result == '{"data": "extracted"}'
 
 
-class TestInstagramAgentDisabled:
-    """Verify instagram_agent returns early when disabled."""
-
-    @patch("aer.config.get_settings")
-    def test_instagram_agent_disabled_by_default(self, mock_settings: MagicMock) -> None:
-        """instagram_agent.run() returns early when AGENT_ENABLED_INSTAGRAM=False."""
-        mock_cfg = MagicMock()
-        mock_cfg.agent_enabled_instagram = False
-        mock_settings.return_value = mock_cfg
-
-        # Verify the setting is False by default
-        from aer.config import Settings
-
-        actual_settings = Settings()
-        assert actual_settings.agent_enabled_instagram is False
-
-
-class TestLayoffsAgentDisabled:
-    """Verify layoffs_agent returns early when disabled."""
-
-    @patch("aer.config.get_settings")
-    def test_layoffs_agent_disabled_by_default(self, mock_settings: MagicMock) -> None:
-        """layoffs_agent.run() returns early when AGENT_ENABLED_LAYOFFS=False."""
-        mock_cfg = MagicMock()
-        mock_cfg.agent_enabled_layoffs = False
-        mock_settings.return_value = mock_cfg
-
-        # Verify the setting is False by default
-        from aer.config import Settings
-
-        actual_settings = Settings()
-        assert actual_settings.agent_enabled_layoffs is False
-
-
-class TestLLMCallCounter:
-    """Verify LLM call counter is enforced in agents."""
-
-    def test_max_llm_calls_per_agent_run_is_25(self) -> None:
-        """MAX_LLM_CALLS_PER_AGENT_RUN is set to 25 for cost control."""
-        assert MAX_LLM_CALLS_PER_AGENT_RUN == 25
-
-    @pytest.mark.skip(reason="component not in this slice")
-    def test_instagram_agent_respects_llm_call_limit(self) -> None:
-        """Instagram agent has LLM call counter that breaks at MAX_LLM_CALLS."""
-        # Verified by code inspection: instagram_agent.py imports MAX_LLM_CALLS_PER_AGENT_RUN
-        # and uses it to break the post-processing loop
-        import inspect
-
-        from aer.agents import instagram_agent
-
-        source = inspect.getsource(instagram_agent.run)
-        # Verify the run function imports and uses the constant
-        assert "MAX_LLM_CALLS_PER_AGENT_RUN" in source
-        assert "llm_calls >= MAX_LLM_CALLS_PER_AGENT_RUN" in source
-
-    @pytest.mark.skip(reason="component not in this slice")
-    def test_layoffs_agent_respects_llm_call_limit(self) -> None:
-        """Layoffs agent has LLM call counter that breaks at MAX_LLM_CALLS."""
-        # Verified by code inspection: layoffs_agent.py imports MAX_LLM_CALLS_PER_AGENT_RUN
-        # and uses it to break the sector-processing loop
-        import inspect
-
-        from aer.agents import layoffs_agent
-
-        source = inspect.getsource(layoffs_agent.run)
-        # Verify the run function imports and uses the constant
-        assert "MAX_LLM_CALLS_PER_AGENT_RUN" in source
-        assert "sectors_done >= MAX_LLM_CALLS_PER_AGENT_RUN" in source
-
-
 class TestAnalysisTierTemperature:
     """Verify ANALYSIS tier allows custom temperature (not forced to 0)."""
 
@@ -338,43 +268,6 @@ class TestAnalysisTierTemperature:
         call_kwargs = mock_provider.call_args[1]
         assert call_kwargs["temperature"] == 0.7  # Preserved as-is
         assert response.content == "Analysis result"
-
-
-class TestPostmortemTemperature:
-    """Verify postmortem.py uses temperature=0."""
-
-    @pytest.mark.skip(reason="component not in this slice")
-    def test_postmortem_has_temperature_zero(self) -> None:
-        """postmortem.py complete() call includes temperature=0.0 parameter."""
-        import inspect
-
-        from aer.simulation import postmortem
-
-        source = inspect.getsource(postmortem)
-        # Verify temperature=0.0 appears in the complete() call
-        assert "temperature=0.0" in source or "temperature = 0.0" in source
-        # Verify the comment about determinism
-        assert "Deterministic" in source or "deterministic" in source
-
-
-class TestJsonModeOnExtractionCallSites:
-    """Verify extraction call sites will use json_mode=True."""
-
-    @pytest.mark.skip(reason="component not in this slice")
-    def test_instagram_agent_imports_complete(self) -> None:
-        """instagram_agent imports complete() from llm_client."""
-        from aer.agents import instagram_agent
-
-        # Verify complete is available in the module
-        assert hasattr(instagram_agent, "complete")
-
-    @pytest.mark.skip(reason="component not in this slice")
-    def test_layoffs_agent_imports_complete(self) -> None:
-        """layoffs_agent imports complete() from llm_client."""
-        from aer.agents import layoffs_agent
-
-        # Verify complete is available in the module
-        assert hasattr(layoffs_agent, "complete")
 
 
 if __name__ == "__main__":

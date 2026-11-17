@@ -1,13 +1,13 @@
 <#
 .SYNOPSIS
-  Fresh-environment quick start check, run by Adi: proves the built wheel works outside the repository.
+  Fresh-environment quick start check, run by Adi: proves the built wheel works when installed, away from the source tree.
 .DESCRIPTION
   Usage: powershell -File tools\quickstart.ps1                 (checks the wheel built from this folder)
          powershell -File tools\quickstart.ps1 -Source <dir>   (checks another checkout, for example a fresh clone)
-  Builds the wheel, installs it into a new virtual environment under %LOCALAPPDATA%\aer-scratch (Python 3.14 by default), changes to an empty
-  folder outside the repository so nothing is imported from the source tree, and runs the README command:
+  Builds the wheel, installs it into a new virtual environment under .scratch in this folder (ignored by git; Python 3.14 by
+  default), changes to an empty folder there so nothing is imported from the source tree, and runs the README command:
   aer-demo. Every line is written, UTF-8, to notes\runs\quickstart-<timestamp>.log.
-  Exit code 0 means the demo command exited 0 from the installed wheel.
+  Exit code 0 means the demo command exited 0 from the installed wheel. A passing run removes its scratch; a failed run keeps it.
 #>
 param([string]$Source = "", [string]$Python = "3.14")
 $ErrorActionPreference = "Continue"
@@ -23,11 +23,11 @@ $utf8 = New-Object System.Text.UTF8Encoding $false
 try { [Console]::OutputEncoding = $utf8 } catch { Write-Host "console encoding unchanged: $_" }
 $env:PYTHONUTF8 = "1"
 $env:PYTHONIOENCODING = "utf-8"
-# scratch lives outside the repository and outside %TEMP%, which disk cleaners empty; runs older than two days go
-$scratch = Join-Path $env:LOCALAPPDATA "aer-scratch"
+# this script creates no scratch outside the project folder (uv keeps its own download cache): scratch is .scratch here, ignored by git; failed runs older than two days go
+$scratch = Join-Path $repo ".scratch"
 New-Item -ItemType Directory -Force -Path $scratch | Out-Null
-Get-ChildItem -Path $scratch -Directory -Filter "aer-quickstart-*" | Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-2) } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-$work = Join-Path $scratch "aer-quickstart-$stamp"
+Get-ChildItem -Path $scratch -Directory -Filter "qs-*" -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-2) } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+$work = Join-Path $scratch "qs-$stamp"
 $dist = Join-Path $work "dist"
 $venv = Join-Path $work "venv"
 $empty = Join-Path $work "empty"
@@ -66,7 +66,10 @@ Invoke-Step "aer-demo" "$demo"
 Set-Location -Path $repo
 
 if ($failed.Count -eq 0) {
-  Write-Log @("", "RESULT: PASS (wheel installed and the demo command exited 0 outside the repository)", "log: $log")
+  Remove-Item -Path $work -Recurse -Force -ErrorAction SilentlyContinue
+  $removed = -not (Test-Path -Path $work)
+  if (-not (Get-ChildItem -Path $scratch -Force -ErrorAction SilentlyContinue)) { Remove-Item -Path $scratch -Force -ErrorAction SilentlyContinue }
+  Write-Log @("", "scratch removed: $removed", "RESULT: PASS (wheel installed and the demo command exited 0 from an empty folder, not the source tree)", "log: $log")
   exit 0
 } else {
   Write-Log @("", "RESULT: FAIL in: $($failed -join ', ')", "log: $log")

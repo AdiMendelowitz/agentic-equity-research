@@ -6,7 +6,7 @@
   Landing file format: first line = commit message; remaining lines = pathspecs to stage (one per line, # comments allowed).
   Refuses to run if notes/ or CLAUDE.md would be staged, if the author email is not a GitHub noreply address,
   if gitleaks (when installed) reports a finding, or if a local pre-check fails (package metadata build and test collection,
-  run with uv in an environment outside the repository). Asks for a yes when more than 20 files are staged.
+  run with uv in an environment under .scratch in this folder, removed when both pass). Asks for a yes when more than 20 files are staged.
   After the push it waits for the CI run of the new commit and prints its result (when gh is installed).
   -SkipPreChecks skips the uv build and collection checks only. -NonInteractive refuses a landing of more than 20 files
   instead of asking. The exit code is the CI result (0 only when the run of every workflow is found and green, or when nothing was pushed).
@@ -49,8 +49,11 @@ if ($LASTEXITCODE -ne 0) { throw "redaction scan reported a hit; landing refused
 if ($SkipPreChecks) {
   Write-Output "pre-checks skipped by switch"
 } elseif (Get-Command uv -ErrorAction SilentlyContinue) {
-  $env:UV_PROJECT_ENVIRONMENT = Join-Path $env:LOCALAPPDATA "aer-landing-venv"
-  $buildDir = Join-Path (Join-Path $env:LOCALAPPDATA "aer-scratch") "aer-landing-build"
+  # no scratch is created outside the project folder (uv keeps its own download cache); the development .venv is left alone, so the check gets its own
+  $scratch = Join-Path $repo ".scratch"
+  $landVenv = Join-Path $scratch "landing-venv"
+  $buildDir = Join-Path $scratch "landing-build"
+  $env:UV_PROJECT_ENVIRONMENT = $landVenv
   Write-Output "pre-check: package metadata build (first run downloads dependencies and can take a few minutes)"
   uv build --out-dir $buildDir
   if ($LASTEXITCODE -ne 0) { throw "uv build failed; landing refused (rerun with -SkipPreChecks only if the failure is in the check itself)" }
@@ -59,6 +62,10 @@ if ($SkipPreChecks) {
   uv run --python 3.14 --extra dev pytest --collect-only -q
   if ($LASTEXITCODE -ne 0) { throw "test collection failed; landing refused (rerun with -SkipPreChecks only if the failure is in the check itself)" }
   Remove-Item Env:\UV_PROJECT_ENVIRONMENT
+  # both pre-checks passed: uv rebuilds these from its cache on the next landing, so nothing is kept
+  Remove-Item -Path $landVenv, $buildDir -Recurse -Force -ErrorAction SilentlyContinue
+  if (-not (Get-ChildItem -Path $scratch -Force -ErrorAction SilentlyContinue)) { Remove-Item -Path $scratch -Force -ErrorAction SilentlyContinue }
+  Write-Output "pre-check scratch removed: $(-not (Test-Path -Path $landVenv))"
 } else { Write-Output "uv not installed locally; pre-checks skipped, CI runs them on push" }
 foreach ($p in $paths) { git --no-pager add -- $p }
 $staged = @(git --no-pager diff --cached --name-only)
@@ -108,6 +115,7 @@ if ($Push -and (Get-Command gh -ErrorAction SilentlyContinue)) {
 } elseif ($Push) {
   Write-Output "gh is not installed: the workflows of the pushed commit were not checked"
   $ciCode = 1
+  Write-Output "ci exit code: 1 (nothing was verified)"
 }
 try { Stop-Transcript | Out-Null } catch { }
 exit $ciCode

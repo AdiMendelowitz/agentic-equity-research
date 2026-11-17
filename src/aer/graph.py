@@ -265,14 +265,15 @@ def _run_ml_prediction(state: BriefState) -> dict:
     running is not stopped, keeps running to completion and may still write its model file; its result is
     discarded.
     Checks the MLPrediction cache before retraining (TTL_ANALYSIS = 43200s).
-    agrees_with_llm and ml_tension describe the LightGBM member (direction, prob_up_raw). They are set before
-    the ensemble fields are attached and are not recomputed from the ensemble direction.
+    The stored prediction is the member the gate validated (selected_prediction). agrees_with_llm and
+    ml_tension describe that member (direction, prob_up_raw). They are set before the ensemble fields are
+    attached and are not recomputed from the ensemble direction.
     """
     import concurrent.futures
 
     from aer.ml.ensemble import compute_ensemble
     from aer.ml.features import build_feature_matrix
-    from aer.ml.models import train_and_predict
+    from aer.ml.models import selected_prediction, train_and_predict
 
     brief = state.get("brief")
     if brief is None:
@@ -321,7 +322,7 @@ def _run_ml_prediction(state: BriefState) -> dict:
         result = future.result(timeout=ML_NODE_TIMEOUT_SECONDS)
         if result is not None:
             lgbm_pred, logistic_pred = result
-            ml = lgbm_pred
+            ml = selected_prediction(lgbm_pred, logistic_pred)
     except concurrent.futures.TimeoutError:
         logger.warning("ML prediction timeout for %s", ticker)
     except Exception as exc:
