@@ -109,6 +109,8 @@ class GateComparison:
     first: SignalSummary
     last: SignalSummary
     p_value: float
+    paired_p_value: float
+    discordant: tuple[int, int]
 
 
 def read_csv(name: str) -> list[dict[str, str]]:
@@ -189,7 +191,17 @@ def gate_comparison(summaries: Sequence[SignalSummary]) -> GateComparison | None
         [last.gate_predicted, len(last.seeds) - last.gate_predicted],
     ]
     _, p_value = stats.fisher_exact(table, alternative="two-sided")
-    return GateComparison(first, last, float(p_value))
+    # The same seed ids run at every signal, so the outcomes are paired; the exact test on the discordant seeds
+    # (McNemar) is the design-matched comparison. Fisher's test is kept as first reported.
+    last_by_seed = {s.seed: s.gate_predicted for s in last.seeds}
+    if {s.seed for s in first.seeds} != set(last_by_seed) or len(last_by_seed) != len(last.seeds):
+        raise ValueError("gate comparison needs the same seed ids at the first and last signal")
+    pairs = [(s.gate_predicted, last_by_seed[s.seed]) for s in first.seeds]
+    only_first = sum(1 for a, b in pairs if a and not b)
+    only_last = sum(1 for a, b in pairs if b and not a)
+    n_discordant = only_first + only_last
+    paired_p = 1.0 if n_discordant == 0 else float(stats.binomtest(only_first, n_discordant, 0.5).pvalue)
+    return GateComparison(first, last, float(p_value), paired_p, (only_first, only_last))
 
 
 def _fmt(value: float | None) -> str:
@@ -252,8 +264,12 @@ def _gate_note(summaries: Sequence[SignalSummary]) -> str:
     first, last = comparison.first, comparison.last
     return (
         f"<p>The gate predicted on {first.gate_predicted} of {len(first.seeds)} seeds at signal {first.signal} "
-        f"and on {last.gate_predicted} of {len(last.seeds)} at signal {last.signal} (Fisher exact test, "
-        f"two-sided p = {comparison.p_value:.3f}). The gate is reported as a failed component.</p>"
+        f"and on {last.gate_predicted} of {len(last.seeds)} at signal {last.signal}. The same seeds run at both "
+        f"strengths, so the comparison is paired: {comparison.discordant[0]} seeds predicted only at "
+        f"{first.signal} and {comparison.discordant[1]} only at {last.signal} (exact McNemar test, two-sided "
+        f"p = {comparison.paired_p_value:.3f}, added after the results were seen; Fisher's exact test, which "
+        f"treats the seeds as independent and was reported first, gives p = {comparison.p_value:.3f}). "
+        "The gate is reported as a failed component.</p>"
     )
 
 
@@ -262,11 +278,11 @@ def detection_section(summaries: Sequence[SignalSummary]) -> str:
     return (
         '<section id="control"><h2>Control experiment</h2>'
         "<p>Synthetic prices with a known injected signal; no market data. Seeds are treated as independent "
-        "replications. Every interval is a 95% Student's t interval over seeds "
+        "replications. Every interval in the table below is a 95% Student's t interval over seeds "
         f"({_t_note(summaries)}). The oracle-minus-model gap is computed within each seed, so it is paired.</p>"
         "<p>The expectations fixed before the run, in <code>src/aer/demo/control.py</code>, use a normal "
-        "multiplier of 1.96, and the README table reports those narrower intervals. This page reports t "
-        "intervals; the column on chance is computed from them.</p>"
+        "multiplier of 1.96, and the README table and the detection figure report those narrower intervals. "
+        "The table below reports t intervals; the column on chance is computed from them.</p>"
         '<table id="control-summary"><caption>Out-of-sample balanced accuracy by injected signal</caption>'
         '<thead><tr><th scope="col">Signal</th><th scope="col">Seeds</th>'
         '<th scope="col">Model, mean (95% t interval)</th><th scope="col">Interval contains 0.50</th>'
@@ -427,7 +443,8 @@ def control_v3_section() -> str:
         "and it is not a leakage test.</p>"
         f"<p>{at_chance} of {len(cells)} cells score exactly 0.500, which is what a prediction of a single "
         "class scores. Such cells pull each mean towards 0.50 and narrow the zero-signal interval, so the "
-        "results describe the thresholded system as deployed. The oracle thresholds the true conditional "
+        "results describe the thresholded ensemble estimator without the gate applied, not the pipeline's "
+        "gated single-model prediction. The oracle thresholds the true conditional "
         "mean at the cost; it is not the rule that maximises balanced accuracy, and the analytic ceiling is "
         "for the zero-cost sign problem, so the gaps are descriptive.</p>"
         '<table id="control-v3-primary"><caption>Pre-registered primary endpoints</caption>'

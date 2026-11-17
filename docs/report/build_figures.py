@@ -269,7 +269,11 @@ def fig_ml_gate() -> Figure:
     bottom.set_xlabel("Cross-validated F1 bin (as labelled in the data)")
     bottom.set_ylabel("Accuracy")
     bottom.set_title("(b) Accuracy where the gate predicted, 95% Wilson intervals", loc="left", fontsize=10)
-    fig.suptitle(f"ML gate by cross-validated F1 bin (n={sum(n_rows)} rows, {sum(n_ml)} predictions)", fontsize=11)
+    n_predicted = sum(n - s for n, s in zip(n_rows, skipped, strict=True))
+    fig.suptitle(
+        f"ML gate by cross-validated F1 bin ({sum(n_rows):,} rows, {n_predicted} predictions, {sum(n_ml)} resolved)",
+        fontsize=11,
+    )
     fig.tight_layout(rect=(0, 0.17, 1, 0.97))
     add_legend(fig, handles + rate_handles() + [count_handle()])
     add_footer(fig)
@@ -383,20 +387,21 @@ def fig_detection() -> Figure:
     signals = sorted({float(r["signal"]) for r in rows})
     seeds = len({r["seed"] for r in rows})
     fig, ax = plt.subplots(figsize=(7.2, 4.8))
-    handles = [reference_line(ax)]
+    # A constant majority-class prediction has balanced accuracy 0.50, so the 0.5 line is that baseline; the raw
+    # majority accuracy in the data is a different metric and is not drawn on this axis.
+    reference = reference_line(ax)
+    reference.set_label("0.50: chance and majority-class balanced accuracy")
+    handles = [reference]
     oracle_means: list[float] = []
-    majority_means: list[float] = []
     for x in signals:
         group = [r for r in rows if float(r["signal"]) == x]
         accs = [float(r["model_balanced_accuracy"]) for r in group if r["model_balanced_accuracy"]]
         oracle = [float(r["oracle_balanced_accuracy"]) for r in group if r["oracle_balanced_accuracy"]]
-        majority = [float(r["majority_accuracy"]) for r in group]
         predicted = sum(1 for r in group if r["gate_predicted"] == "True")
         mean = sum(accs) / len(accs) if accs else math.nan
         sd = math.sqrt(sum((a - mean) ** 2 for a in accs) / (len(accs) - 1)) if len(accs) > 1 else 0.0
         half = Z95 * sd / math.sqrt(len(accs)) if accs else 0.0
         oracle_means.append(sum(oracle) / len(oracle) if oracle else math.nan)
-        majority_means.append(sum(majority) / len(majority))
         ax.errorbar(x, mean, yerr=half, fmt="o", color=PALETTE["blue"], capsize=4, elinewidth=1.4, zorder=3)
         ax.annotate(
             f"gate predicted {predicted}/{len(group)}",
@@ -412,21 +417,19 @@ def fig_detection() -> Figure:
     (ceiling_line,) = ax.plot(
         signals, ceiling, color=PALETTE["orange"], linewidth=1.4, linestyle=":", label="analytic ceiling"
     )
-    ax.scatter(signals, majority_means, marker="s", s=36, color=PALETTE["grey"], zorder=2)
     ax.set_ylim(0.38, 0.85)
     ax.set_xlim(signals[0] - 0.09, signals[-1] + 0.09)
     ax.set_xlabel("Injected signal strength")
     ax.set_ylabel("Balanced accuracy (out of sample)")
     ax.set_title(
-        f"Detection of an injected signal: balanced accuracy, 95% interval ({seeds} seeds, {len(rows)} cells)",
+        f"Injected-signal detection, 95% normal interval ({seeds} seeds, {len(rows)} cells)",
         fontsize=10,
     )
     fig.tight_layout(rect=(0, 0.17, 1, 1))
-    mean_handle = Line2D([], [], marker="o", color=PALETTE["blue"], linestyle="none", label="model, 95% interval")
-    majority_handle = Line2D(
-        [], [], marker="s", color=PALETTE["grey"], linestyle="none", label="majority-class accuracy (baseline)"
+    mean_handle = Line2D(
+        [], [], marker="o", color=PALETTE["blue"], linestyle="none", label="model, 95% normal interval (1.96)"
     )
-    add_legend(fig, handles + [oracle_line, ceiling_line, mean_handle, majority_handle], ncol=3)
+    add_legend(fig, handles + [oracle_line, ceiling_line, mean_handle], ncol=2)
     note = "Synthetic data with a known injected signal; no market data."
     fig.text(0.01, 0.012, note, fontsize=9, color=PALETTE["dark"])
     return fig

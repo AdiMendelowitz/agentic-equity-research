@@ -712,7 +712,7 @@ z
    </g>
   </g>
   <g id="text_36">
-   <text style="font-size: 11px; font-family: 'DejaVu Sans'; text-anchor: middle" x="259.2" y="16.998281" transform="rotate(-0 259.2 16.998281)">ML gate by cross-validated F1 bin (n=2374 rows, 145 predictions)</text>
+   <text style="font-size: 11px; font-family: 'DejaVu Sans'; text-anchor: middle" x="259.2" y="16.998281" transform="rotate(-0 259.2 16.998281)">ML gate by cross-validated F1 bin (2,374 rows, 169 predictions, 145 resolved)</text>
   </g>
   <g id="text_37">
    <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #374151" x="5.184" y="426.816" transform="rotate(-0 5.184 426.816)">Whole-sample aggregates; no ticker, week or date dimension is published.</text>

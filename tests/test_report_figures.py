@@ -73,6 +73,21 @@ def test_figures_hold_no_ticker_or_price_text() -> None:
         assert banned_words.search(text) is None, path.name
 
 
+def test_detection_figure_draws_no_raw_accuracy_on_the_balanced_accuracy_axis(tmp_path: Path) -> None:
+    svg = _build(tmp_path)["detection_curve.svg"].decode("utf-8")
+    assert "majority-class accuracy (baseline)" not in svg
+    assert "0.50: chance and majority-class balanced accuracy" in svg
+    assert "95% normal interval" in svg
+
+
+def test_ml_gate_title_separates_predictions_from_resolved_predictions(tmp_path: Path) -> None:
+    rows = build_figures.read_rows("eval_ml_gate.csv")
+    predicted = sum(int(r["n_rows"]) - int(r["n_skipped"]) for r in rows)
+    resolved = sum(int(r["n_ml_resolved"]) for r in rows)
+    svg = _build(tmp_path)["ml_gate.svg"].decode("utf-8")
+    assert f"{predicted} predictions, {resolved} resolved" in svg
+
+
 def test_wilson_interval_matches_hand_computed_values() -> None:
     # 5 of 10: centre 0.5, half-width 0.2634, so [0.2366, 0.7634].
     lo, hi = build_figures.wilson(5, 10)

@@ -266,7 +266,25 @@ def test_gate_comparison_matches_an_exact_hypergeometric_sum(site: Path) -> None
     comparison = build_report.gate_comparison(build_report.control())
     assert comparison is not None
     assert comparison.p_value == pytest.approx(expected, rel=1e-9)
-    assert f"two-sided p = {expected:.3f}" in (site / "index.html").read_text(encoding="utf-8")
+    assert f"gives p = {expected:.3f}" in (site / "index.html").read_text(encoding="utf-8")
+
+
+def test_gate_comparison_pairs_seeds_with_an_exact_mcnemar_test(site: Path) -> None:
+    rows = _control_rows()
+    signals = sorted({_signal(r) for r in rows}, key=float)
+    by_seed = [
+        {r["seed"]: r["gate_predicted"] == "True" for r in rows if _signal(r) == s} for s in (signals[0], signals[-1])
+    ]
+    only_first = sum(1 for seed, a in by_seed[0].items() if a and not by_seed[1][seed])
+    only_last = sum(1 for seed, a in by_seed[0].items() if by_seed[1][seed] and not a)
+    n = only_first + only_last
+    tail = sum(math.comb(n, k) for k in range(min(only_first, only_last) + 1)) / 2**n
+    expected = min(1.0, 2 * tail)
+    comparison = build_report.gate_comparison(build_report.control())
+    assert comparison is not None
+    assert comparison.discordant == (only_first, only_last)
+    assert comparison.paired_p_value == pytest.approx(expected, rel=1e-9)
+    assert f"exact McNemar test, two-sided p = {expected:.3f}" in (site / "index.html").read_text(encoding="utf-8")
 
 
 def test_unexpected_gate_value_is_rejected() -> None:
