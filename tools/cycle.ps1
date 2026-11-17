@@ -47,7 +47,11 @@ function Invoke-Logged([string]$commandLine, [string]$logPath) {
 function Complete-Cycle([bool]$passed) {
   if ($passed) { Add-Result "RESULT: PASS" } else { Add-Result "RESULT: FAIL" }
   Add-Result ("cycle finished " + (Get-Date -Format "yyyyMMdd-HHmmss"))
-  if ($ResultFile -ne "") { [System.IO.File]::WriteAllLines($ResultFile, $script:result.ToArray(), $utf8) }
+  if ($ResultFile -ne "") {
+    $resultDir = Split-Path -Parent $ResultFile
+    if ($resultDir -and -not (Test-Path -LiteralPath $resultDir)) { New-Item -ItemType Directory -Force -Path $resultDir | Out-Null }
+    [System.IO.File]::WriteAllLines($ResultFile, $script:result.ToArray(), $utf8)
+  }
   if ($passed) { exit 0 } else { exit 1 }
 }
 

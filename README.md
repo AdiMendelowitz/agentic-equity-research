@@ -1,30 +1,85 @@
 # agentic-equity-research
 
-**A multi-agent LLM equity-research pipeline with cost-governed model routing, deterministic signal code, a cross-validated ML gate that can abstain, and an evaluation that reports what it can and cannot detect.**
+**An LLM research pipeline built and evaluated the way an ML research team would build it, with cost-governed model routing, leakage-tested ML behind a gate that can abstain, a pre-registered control experiment, and an evaluation that publishes its null result and its own correction.**
+
+<p align="center"><img src="docs/img/hero_evidence.svg" alt="Recorded hit rate against two simple rules, the pre-registered control and model calls by routing tier" width="900"></p>
 
 [![CI](https://github.com/AdiMendelowitz/agentic-equity-research/actions/workflows/ci.yml/badge.svg)](https://github.com/AdiMendelowitz/agentic-equity-research/actions/workflows/ci.yml)
+[![Report](https://img.shields.io/badge/evaluation%20report-live-4C78A8)](https://adimendelowitz.github.io/agentic-equity-research/)
+[![Pre-registered](https://img.shields.io/badge/control%20v3-pre--registered-7A6AA6)](https://github.com/AdiMendelowitz/agentic-equity-research/issues/1)
 [![Python 3.12 to 3.14](https://img.shields.io/badge/python-3.12%20%7C%203.13%20%7C%203.14-3776AB?logo=python&logoColor=white)](pyproject.toml)
 [![Licence: MIT](https://img.shields.io/badge/licence-MIT-green)](LICENSE)
-[![Code style: black](https://img.shields.io/badge/code%20style-black-000000)](https://github.com/psf/black)
-[![Linting: ruff](https://img.shields.io/badge/linting-ruff-D7FF64)](https://github.com/astral-sh/ruff)
 
 > [!NOTE]
 > A research demonstration, not investment advice and not a trading system. By default it runs offline on synthetic data and makes no model call.
 
 **[Evaluation report](https://adimendelowitz.github.io/agentic-equity-research/)**, rebuilt from `docs/data` on every push by its own workflow, with the hash of each input in its footer.
 
-[Results](#results-at-a-glance) · [Quick start](#quick-start) · [How it works](#how-it-works) · [Evaluation](#what-the-evaluation-found) · [Control experiment](#does-the-harness-detect-a-signal-that-exists) · [Tests](#what-the-tests-check) · [Limits](#limits) · [Roadmap](#roadmap)
+[What it shows](#what-it-shows) · [Results](#results-at-a-glance) · [Engineering](#engineering-at-a-glance) · [Quick start](#quick-start) · [How it works](#how-it-works) · [Evaluation](#what-the-evaluation-found) · [Control experiment](#does-the-harness-detect-a-signal-that-exists) · [Tests](#what-the-tests-check) · [Limits](#limits) · [Roadmap](#roadmap)
+
+## What it shows
+
+- **Measurement before claims.** A pre-registered control injects a known signal into synthetic prices and checks that the harness finds it, before any result on recorded output is read.
+- **Engineering that holds up to review.** Over 1,100 tests, hermetic imports, leakage tests, a type-error ratchet, secret and redaction scans, and a CI matrix on Python 3.12, 3.13 and 3.14 gate every release.
+- **Honest reporting.** The recorded calls show no measurable edge, a rule that always says down does better, and a counting error found in review was corrected in public with the old and new figures side by side.
 
 ## Results at a glance
 
-- **No measurable edge on recorded output.** 314 of 629 resolved calls were correct (0.499, about 0.46 to 0.54), counting one decision per ticker and day, and detecting 0.55 against 0.50 would need about 780 independent calls. A rule that always says down scores 350 of 629 (0.556) on the same calls. These figures were corrected on 17 November 2026; the correction note is under "What the evaluation found".
-- **The harness detects a signal that exists, under a known generator.** In a pre-registered control on synthetic prices, the two-model ensemble (only its LightGBM member is Platt-calibrated), scored on every seed whether or not the gate passed, reaches balanced accuracy 0.530 and 0.565 at the two non-zero signal strengths, both above 0.50 after a Holm adjustment, and stays within 0.03 of chance at zero signal. The zero-signal mean is itself 0.516, and the lower bound at 0.3 (0.519) lies inside the zero-signal interval, so only the strongest signal is clearly apart from the noise result. A rule that thresholds the true conditional mean is 0.104 and 0.145 ahead.
-- **The ML gate barely separates signal from noise.** In that control it passed in 4 of 46 seeds with no signal and 11 of 46 at the strongest, a descriptive count and not a tested endpoint; a conformal gate is the next candidate, to be tested against matched-coverage selection.
+- **The harness detects a signal that exists, under a known generator.** In the pre-registered control the two-model ensemble (only its LightGBM member is Platt-calibrated), scored on every seed whether or not the gate passed, reaches balanced accuracy 0.530 and 0.565 at the two non-zero signal strengths, both above 0.50 after a Holm adjustment, and stays within 0.03 of chance at zero signal. The zero-signal mean is itself 0.516, and the lower bound at 0.3 (0.519) lies inside the zero-signal interval, so only the strongest signal is clearly apart from the noise result.
+- **No measurable edge on recorded output.** 314 of 629 resolved calls were correct (0.499, about 0.46 to 0.54), counting one decision per ticker and day, and detecting 0.55 against 0.50 would need about 780 independent calls. A rule that always says down scores 350 of 629 (0.556) on the same calls. These figures were corrected on 17 November 2026, and the correction note is under "What the evaluation found".
+- **The ML gate barely separates signal from noise.** In the control it passed in 4 of 46 seeds with no signal and 11 of 46 at the strongest, a descriptive count and not a tested endpoint. A conformal gate is the next candidate, to be tested against matched-coverage selection.
 - **The multi-agent design is not yet justified by evidence.** Nothing here compares the five agents with one well-prompted model on the same data; that comparison is on the roadmap.
 
-<p align="center"><img src="docs/img/detection_curve.svg" alt="Control version 2, model and oracle balanced accuracy against signal strength, with ceiling and 0.50 line" width="680"></p>
+## Engineering at a glance
 
-The figure shows control version 2 (20 seeds per strength, one uncalibrated classifier per seed). The version 3 figures quoted above, for the ensemble on 46 seeds, are in the first table under "Does the harness detect a signal that exists?".
+| Area | What is in place | Where |
+| --- | --- | --- |
+| Model routing | Four-step provider cascade with the paid model only as fallback, and a usage ledger that counts calls without usage instead of estimating them | `src/aer/utils/llm_client.py`, `usage_meter.py` |
+| ML | LightGBM and logistic regression, purged time-series cross-validation, out-of-fold Platt calibration, a holdout block no fit sees, and a gate that abstains | `src/aer/ml/` |
+| Leakage | Future-bar mutation, label alignment, purge-gap geometry and holdout isolation tested | `tests/ml/test_leakage.py`, `tests/test_models_fixes.py` |
+| Pre-registration | Specification and analysis code hashed in a public issue before the first results commit | `docs/prereg/control-v3.md`, [issue 1](https://github.com/AdiMendelowitz/agentic-equity-research/issues/1) |
+| Reproducibility | Report and figures rebuilt from `docs/data` on every push, input hashes in the page footer, byte-identical figure builds tested | `docs/report/`, `.github/workflows/pages.yml` |
+| Release safety | Hermetic imports with sockets refused, redaction scan, gitleaks, licence audit and a mypy ceiling | `tests/test_hermetic.py`, `tools/` |
+
+Every change is checked locally, released from a private repository as one exported commit, and checked again in public CI.
+
+```mermaid
+flowchart TD
+    start([Change ready in the private repository]) --> fix[Formatter and safe linter fixes]
+    fix --> check[Lint, format, type ceiling and tests]
+    check --> passed{All checks pass?}
+    passed -->|No| notlanded([Not landed, nothing committed])
+    passed -->|Yes| land[Land as one private commit]
+    land --> export[Export the files tracked at HEAD]
+    export --> scans[gitleaks, redaction scan and fresh-environment quick start]
+    scans --> clean{Export clean?}
+    clean -->|No| stopped([Release stopped, nothing pushed])
+    clean -->|Yes| owner{Owner types publish?}
+    owner -->|No| stopped
+    owner -->|Yes| push[Push one commit to the public repository]
+    push --> ci[CI on Python 3.12, 3.13 and 3.14 with scans and the offline demo]
+    push --> pages[Pages runs the report tests and rebuilds figures and report from docs/data]
+    ci --> green{CI green?}
+    green -->|Yes| published([Release reported green])
+    green -->|No| failed([Release reported failed])
+    pages --> sitecheck{Tests and site scan pass?}
+    sitecheck -->|Yes| deployed([Report page deployed])
+    sitecheck -->|No| notdeployed([Page not deployed])
+    classDef terminal fill:#EEF0F3,stroke:#8A94A3,stroke-width:1.5px,color:#1F2937
+    classDef step fill:#DCE8F5,stroke:#4C78A8,stroke-width:1.5px,color:#1F2937
+    classDef decision fill:#E6E0F3,stroke:#7A6AA6,stroke-width:1.5px,color:#1F2937
+    classDef human fill:#F2DDE7,stroke:#9C5F7E,stroke-width:1.5px,color:#1F2937
+    classDef good fill:#D5EBDD,stroke:#4E8F6E,stroke-width:1.5px,color:#1F2937
+    classDef bad fill:#F3D6CF,stroke:#B5604F,stroke-width:1.5px,color:#1F2937
+    class start terminal
+    class fix,check,land,export,scans,push,ci,pages step
+    class passed,clean,green,sitecheck decision
+    class owner human
+    class published,deployed good
+    class notlanded,stopped,failed,notdeployed bad
+```
+
+Blue steps run automatically, lavender diamonds are automatic checks, the rose diamond is the one human decision, green ends are success and terracotta ends are failures. The release script waits for the CI run and reports its result.
 
 ## Quick start
 
@@ -70,24 +125,122 @@ The demo computes indicators, signals and the ML gate locally on synthetic price
 
 ## How it works
 
-<p align="center"><img src="docs/diagrams/architecture.svg" alt="Architecture: five parallel agents, synthesis and the ML gate, with model calls routed cheapest first" width="860"></p>
+```mermaid
+flowchart TD
+    request([Ticker and date requested]) --> ind[Deterministic indicators]
+    ind --> agents
+    subgraph agents [Five agents in parallel]
+        direction LR
+        fund[Fundamental]
+        tech[Technical]
+        sent[Sentiment]
+        macro[Macro]
+        pos[Positioning]
+        fund ~~~ tech ~~~ sent ~~~ macro ~~~ pos
+    end
+    agents --> synth[Synthesis] --> post[Post-processing] --> gate{Cross-validation passes the gate?}
+    gate -->|Yes| calib[Prediction with calibrated probability]
+    gate -->|No| abstain[Abstain, no ML prediction]
+    calib --> brief([Brief stored for scoring])
+    abstain --> brief
+    agents -.->|model calls| routing[[Model routing, cheapest first]]
+    synth -.-> routing
+    routing -.-> ledger[(Usage ledger)]
+    classDef terminal fill:#EEF0F3,stroke:#8A94A3,stroke-width:1.5px,color:#1F2937
+    classDef code fill:#DCE8F5,stroke:#4C78A8,stroke-width:1.5px,color:#1F2937
+    classDef agent fill:#E6E0F3,stroke:#7A6AA6,stroke-width:1.5px,color:#1F2937
+    classDef llm fill:#F2DDE7,stroke:#9C5F7E,stroke-width:1.5px,color:#1F2937
+    classDef ml fill:#D5EBDD,stroke:#4E8F6E,stroke-width:1.5px,color:#1F2937
+    classDef stop fill:#F3D6CF,stroke:#B5604F,stroke-width:1.5px,color:#1F2937
+    classDef paid fill:#F5E6CF,stroke:#B08550,stroke-width:1.5px,color:#1F2937
+    class request,brief terminal
+    class ind,post,ledger code
+    class fund,tech,sent,macro,pos agent
+    class synth llm
+    class gate,calib ml
+    class abstain stop
+    class routing paid
+```
 
-Blue boxes are deterministic code, lavender the agents, rose the synthesis model call, green the ML gate and the free providers, sand the paid fallback and terracotta an abstention.
+Blue boxes are deterministic code, lavender the agents, rose the synthesis model call, green the ML gate, terracotta an abstention and sand the routing layer, drawn as a predefined process and expanded below.
 
 - **Multi-agent pipeline.** Five agents and one synthesis node built with LangGraph, in `src/aer/graph.py` and `src/aer/agents/`.
-- **Cost-governed routing.** A four-step provider cascade that reaches the paid model only when the free options fail or a prompt exceeds their context limit, with a ledger that counts calls without usage instead of estimating them, in `src/aer/utils/llm_client.py` and `src/aer/utils/usage_meter.py`.
 - **Python-first signals.** Thresholds and classifications run as deterministic code before any model call, in `src/aer/indicators/` and `src/aer/utils/python_replacements.py`.
-- **ML layer.** LightGBM and logistic regression with purged time-series cross-validation, Platt calibration and a gate that abstains, in `src/aer/ml/`.
 - **Evaluation.** A scorer for recorded calls (direction of the five-day move, `weekly_scorer.py`), a scoring spec with a resolution rule for every output class of the synthetic demo, and power arithmetic, in `src/aer/evaluation/`.
 - **Operations.** A prefetch manifest, a run heartbeat and run history, in `src/aer/prefetch/`, `src/aer/utils/pipeline_heartbeat.py` and `docs/data/run_history.csv`, where 22 of 29 scheduled runs completed with exit code 0.
+
+### Cost-governed model routing
+
+Each model call tries the free providers first and reaches the paid model only when they fail or the prompt exceeds their context limit. Of 7,033 model calls logged over 33 runs, 1,238 (18%) reached the paid fallback.
+
+```mermaid
+flowchart TD
+    call([Model call requested]) --> tier{Valid tier?}
+    tier -->|No| valueerror([ValueError])
+    tier -->|Yes| fits{Prompt within the free context limit?}
+    fits -->|Yes| primary[Primary free provider]
+    primary --> ok1{Usable response, JSON when required?}
+    ok1 -->|Yes| done([Response returned, usage metered])
+    ok1 -->|No| secondary[Secondary free provider]
+    secondary --> ok2{Usable response, JSON when required?}
+    ok2 -->|Yes| done
+    ok2 -->|No| local{Local Ollama running?}
+    fits -->|No| local
+    local -->|Yes| ollama[Local model]
+    ollama --> ok3{Usable response, JSON when required?}
+    ok3 -->|Yes| done
+    ok3 -->|No| paid[Paid fallback model]
+    local -->|No| paid
+    paid --> ok4{Call succeeded?}
+    ok4 -->|Yes| fallback([Response returned, marked as fallback])
+    ok4 -->|No| error([RuntimeError with the failure chain])
+    classDef terminal fill:#EEF0F3,stroke:#8A94A3,stroke-width:1.5px,color:#1F2937
+    classDef decision fill:#E6E0F3,stroke:#7A6AA6,stroke-width:1.5px,color:#1F2937
+    classDef free fill:#EEF6F1,stroke:#4E8F6E,stroke-width:1.5px,color:#1F2937
+    classDef paid fill:#F5E6CF,stroke:#B08550,stroke-width:1.5px,color:#1F2937
+    classDef good fill:#D5EBDD,stroke:#4E8F6E,stroke-width:1.5px,color:#1F2937
+    classDef bad fill:#F3D6CF,stroke:#B5604F,stroke-width:1.5px,color:#1F2937
+    class call terminal
+    class tier,fits,ok1,ok2,local,ok3,ok4 decision
+    class primary,secondary,ollama free
+    class paid paid
+    class done,fallback good
+    class valueerror,error bad
+```
+
+Pale green steps cost nothing per call, sand is the paid model, lavender diamonds are checks, green ends return a response and terracotta ends raise an error. The cascade is in `src/aer/utils/llm_client.py` and the ledger in `src/aer/utils/usage_meter.py`.
+
+### ML layer
+
+LightGBM and logistic regression with purged time-series cross-validation, out-of-fold Platt calibration and a gate that abstains, in `src/aer/ml/`. The fold layout below is drawn by the code's own splitter and constants, so the picture cannot drift from the implementation.
+
+<p align="center"><img src="docs/img/cv_geometry.svg" alt="Purged time-series cross-validation folds, purge gaps and the holdout block, drawn from the code" width="760"></p>
 
 ## What the evaluation found
 
 The evaluation found no measurable edge. The unit is the ticker-day, one brief per ticker and day. Of 2,321 ticker-days across 51 tickers, 629 were resolved against a five-day forward return, and 314 of those were correct, an accuracy on resolved actionable calls of 0.499 (about 0.46 to 0.54 by normal approximation). That interval contains 0.50. None of the 1,572 HOLD briefs received a scored correctness outcome, and 120 other briefs were not resolved, so this figure describes the resolved calls only.
 
-**Correction, 17 November 2026.** The aggregates first published on 9 November counted same-day reruns of the pipeline as separate calls. Of the 2,609 rows first published, 288 were second or later runs of a ticker-day already in the store, scored against the same five-day outcome as the first run, so they were not independent observations. Every evaluation figure in this README and on the report page now counts one decision per ticker-day and keeps the first run of each day. The scored cohort moved from 342 correct of 707 (0.484) to 314 of 629 (0.499), and the resolved ML predictions from 74 correct of 145 to 64 of 120. Keeping the last run of each day instead gives the same 314 of 629, and 63 of 121 for the ML predictions. The conclusion is unchanged, and the cause, evaluation writes without a run identifier, is on the roadmap.
+```mermaid
+flowchart TD
+    briefs[(2,321 briefs, one per ticker-day)] --> hold([1,572 HOLD, no scored outcome])
+    briefs --> actionable[749 BUY, SELL or AVOID]
+    actionable --> unresolved([120 not resolved])
+    actionable --> resolved[629 resolved against a five-day return]
+    resolved --> correct([314 correct, 0.499])
+    resolved --> incorrect([315 incorrect])
+    classDef total fill:#DCE8F5,stroke:#4C78A8,stroke-width:1.5px,color:#1F2937
+    classDef out fill:#EEF0F3,stroke:#8A94A3,stroke-width:1.5px,color:#1F2937
+    classDef scored fill:#E6E0F3,stroke:#7A6AA6,stroke-width:1.5px,color:#1F2937
+    classDef good fill:#D5EBDD,stroke:#4E8F6E,stroke-width:1.5px,color:#1F2937
+    classDef bad fill:#F3D6CF,stroke:#B5604F,stroke-width:1.5px,color:#1F2937
+    class briefs,actionable total
+    class hold,unresolved out
+    class resolved scored
+    class correct good
+    class incorrect bad
+```
 
-<p align="center"><img src="docs/diagrams/evaluation-funnel.svg" alt="Evaluation cohort, 2,321 briefs (one per ticker-day), 749 actionable, 629 resolved, 314 correct" width="660"></p>
+**Correction, 17 November 2026.** The aggregates first published on 9 November counted same-day reruns of the pipeline as separate calls. Of the 2,609 rows first published, 288 were second or later runs of a ticker-day already in the store, scored against the same five-day outcome as the first run, so they were not independent observations. Every evaluation figure in this README and on the report page now counts one decision per ticker-day and keeps the first run of each day. The scored cohort moved from 342 correct of 707 (0.484) to 314 of 629 (0.499), and the resolved ML predictions from 74 correct of 145 to 64 of 120. Keeping the last run of each day instead gives the same 314 of 629, and 63 of 121 for the ML predictions. The conclusion is unchanged, and the cause, evaluation writes without a run identifier, is on the roadmap.
 
 <p align="center"><img src="docs/img/calibration.svg" alt="Hit rate by conviction bin with intervals, against the 0.50 line" width="640"></p>
 
@@ -104,7 +257,9 @@ By conviction bin, the 0.6 bin scored 119 of 261 (0.456), the 0.7 bin 174 of 316
 
 A null result means little unless the harness can find a signal when one is there. The control injects a signal of strength s into synthetic prices (1,500 sessions per seed) and scores balanced accuracy, whose expected value without skill is 0.50 at any class balance.
 
-The current control, version 3, is pre-registered. It scores the calibrated ensemble on 46 fresh seeds per strength, on every seed whether or not the gate passed, so it measures the estimator and not the system with abstention. Its specification, `docs/prereg/control-v3.md`, was released in a public commit and hashed in [issue 1](https://github.com/AdiMendelowitz/agentic-equity-research/issues/1) before the first public commit of the results; the seed count comes from a power calculation for a margin of 0.03.
+<p align="center"><img src="docs/img/detection_curve_v3.svg" alt="Control version 3 balanced accuracy by signal strength, with per-seed points, intervals and the pre-registered margin" width="720"></p>
+
+The current control, version 3, is pre-registered. It scores the two-model ensemble on 46 fresh seeds per strength, on every seed whether or not the gate passed, so it measures the estimator and not the system with abstention. Its specification, `docs/prereg/control-v3.md`, was released in a public commit and hashed in [issue 1](https://github.com/AdiMendelowitz/agentic-equity-research/issues/1) before the first public commit of the results; the seed count comes from a power calculation for a margin of 0.03.
 
 | Signal strength s | Model balanced accuracy | Pre-registered test | Verdict | Gate passed |
 | --- | --- | --- | --- | --- |
@@ -117,9 +272,31 @@ A rule that thresholds the true conditional mean stays 0.104 and 0.145 ahead at 
 <details>
 <summary>Earlier versions of the control (1 and 2)</summary>
 
-Version 2 used 20 seeds per strength. The model is one uncalibrated classifier per seed: the gate's cross-validation picks LightGBM or logistic regression, with logistic regression when the gate abstains. The deployed calibrated ensemble is not what this measures. Model figures cover all 20 seeds.
+Version 2 used 20 seeds per strength. The model is one uncalibrated classifier per seed, chosen by the gate's cross-validation between LightGBM and logistic regression, with logistic regression when the gate abstains. The deployed calibrated ensemble is not what this measures. Model figures cover all 20 seeds.
 
-<p align="center"><img src="docs/diagrams/control-design.svg" alt="Control design: a known injected signal, one classifier per seed, compared with the oracle and the analytic ceiling" width="630"></p>
+```mermaid
+flowchart TD
+    gen([Generator, injected signal s, 20 seeds]) --> prices[Synthetic prices, 1,500 sessions]
+    prices --> feats[Features and five-day labels]
+    feats --> split[Chronological split, last 20% held out after a purge gap]
+    split --> clf[One classifier per seed]
+    gen --> oracle[Oracle on the true conditional mean]
+    gen --> ceiling[Analytic ceiling]
+    clf --> balacc[Balanced accuracy]
+    oracle --> balacc
+    balacc --> expect([Five expectations, fixed before the run])
+    ceiling --> expect
+    classDef gen fill:#F2DDE7,stroke:#9C5F7E,stroke-width:1.5px,color:#1F2937
+    classDef data fill:#DCE8F5,stroke:#4C78A8,stroke-width:1.5px,color:#1F2937
+    classDef model fill:#D5EBDD,stroke:#4E8F6E,stroke-width:1.5px,color:#1F2937
+    classDef ref fill:#F5E6CF,stroke:#B08550,stroke-width:1.5px,color:#1F2937
+    classDef verdict fill:#E6E0F3,stroke:#7A6AA6,stroke-width:1.5px,color:#1F2937
+    class gen gen
+    class prices,feats,split data
+    class clf model
+    class oracle,ceiling ref
+    class balacc,expect verdict
+```
 
 Five expectations, defined in `src/aer/demo/control.py`, were written down before the run in the private development history, and all five were met. They check the oracle against the ceiling, that the zero-signal interval contains 0.50, that the interval at 0.6 lies above 0.50, that accuracy rises with s, and that the model does not exceed the oracle. They are checks on one run, not five independent confirmations.
 
@@ -128,6 +305,8 @@ Five expectations, defined in `src/aer/demo/control.py`, were written down befor
 | 0.0 | 0.481 (0.459 to 0.502) | 0.500 | 0.500 | 4 of 20 seeds |
 | 0.3 | 0.531 (0.506 to 0.555) | 0.621 | 0.641 | 4 of 20 seeds |
 | 0.6 | 0.574 (0.548 to 0.600) | 0.702 | 0.717 | 6 of 20 seeds |
+
+<p align="center"><img src="docs/img/detection_curve.svg" alt="Control version 2, model and oracle balanced accuracy against signal strength, with ceiling and 0.50 line" width="680"></p>
 
 The negative control was met narrowly. At zero signal the upper bound of the interval is only 0.002 above 0.50, and the mean sits below 0.50; this shows no false detection here, not that the model is equivalent to chance. At s = 0.6 the model's margin over chance is 0.074, against 0.202 for the oracle. The gate fired in 20%, 20% and 30% of seeds as the signal grew, so its F1 threshold showed no useful discrimination here.
 
@@ -142,6 +321,7 @@ The first run failed as a design and stays on record in `docs/data/detection_cur
 - **Data gates.** `tests/test_gates.py` checks the published data schemas and keeps the demo package out of ML and evaluation code.
 - **Publication checks.** A redaction scan (`tools/redact_check.py`), a secrets scan (gitleaks) and a licence audit that fails on GPL and AGPL licence names in the locked environment run in CI.
 - **Pre-registered analysis.** `tests/test_control_v3.py` pins the equivalence, Holm and paired-gap rules on hand-built cases and checks that the specification text states the same constants as the code.
+- **Figures and README.** `tests/test_report_figures.py` rebuilds every figure twice and requires byte-identical output that matches the committed files. `tests/test_readme_figures.py` checks that the README figures use the pre-registered intervals and the code's fold layout, and that the counts in this README match the data they are drawn from.
 - **Types.** mypy runs in CI against a fixed ceiling of 62 known errors (`tools/mypy_ratchet.py`). A run above the ceiling fails; the ceiling is lowered by hand as errors are fixed, and it compares counts, not which errors.
 - **Versions.** CI runs the test suite and a blocking offline demo on Python 3.12, 3.13 and 3.14.
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import re
+import sys
 from pathlib import Path
 from types import ModuleType
 
@@ -15,6 +16,9 @@ def _load() -> ModuleType:
     spec = importlib.util.spec_from_file_location("build_figures", ROOT / "docs" / "report" / "build_figures.py")
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
+    # Register before exec: @dataclass under `from __future__ import annotations` looks the class's
+    # module up in sys.modules (Python docs recipe for importing a source file directly).
+    sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     return module
 
