@@ -22,7 +22,9 @@
 - **The ML gate barely separates signal from noise.** In that control it passed in 4 of 46 seeds with no signal and 11 of 46 at the strongest, a descriptive count and not a tested endpoint; a conformal gate is the next candidate, to be tested against matched-coverage selection.
 - **The multi-agent design is not yet justified by evidence.** Nothing here compares the five agents with one well-prompted model on the same data; that comparison is on the roadmap.
 
-<p align="center"><img src="docs/img/detection_curve.svg" alt="Model and oracle balanced accuracy against injected signal strength, with the analytic ceiling and the 0.50 chance line" width="680"></p>
+<p align="center"><img src="docs/img/detection_curve.svg" alt="Control version 2, model and oracle balanced accuracy against signal strength, with ceiling and 0.50 line" width="680"></p>
+
+The figure shows control version 2 (20 seeds per strength, one uncalibrated classifier per seed). The version 3 figures quoted above, for the ensemble on 46 seeds, are in the first table under "Does the harness detect a signal that exists?".
 
 ## Quick start
 

@@ -21,8 +21,9 @@ Design:
  - Zero LLM calls: Python indicators only
  - MultiIndex adapter: wraps raw OHLCV for signal_generator.generate
  - Signal-price reconciliation both use raw prices from get_price_history_raw
- - Per-fold error tracking: fold_error is set on any exception, including a failed signal on any OOS bar, and
-   such a fold is not counted as completed; other folds complete
+ - Per-fold error tracking: a failed signal on any OOS bar, or any other exception outside the metric steps, sets
+   fold_error and the fold is not counted as completed; a failed Sharpe or drawdown calculation leaves that metric
+   None and the fold still counts; other folds complete
  - Per-fold factor data graceful None if Ken French absent; walk-forward continues
  - Seeding random.seed(42) at function entry for reproducibility
 """

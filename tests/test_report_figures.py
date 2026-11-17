@@ -76,8 +76,9 @@ def test_figures_hold_no_ticker_or_price_text() -> None:
 def test_detection_figure_draws_no_raw_accuracy_on_the_balanced_accuracy_axis(tmp_path: Path) -> None:
     svg = _build(tmp_path)["detection_curve.svg"].decode("utf-8")
     assert "majority-class accuracy (baseline)" not in svg
-    assert "0.50: chance and majority-class balanced accuracy" in svg
+    assert "0.50, chance and majority-class balanced accuracy" in svg
     assert "95% normal interval" in svg
+    assert "Control v2" in svg
 
 
 def test_ml_gate_title_separates_predictions_from_resolved_predictions(tmp_path: Path) -> None:

@@ -12,7 +12,9 @@ the LLM due to horizon mismatch.
 What the stored columns mean:
 - actual_direction is UP when the five-day return on adjusted closes is above zero and DOWN otherwise. There is
   no cost band, so a wrong BUY fixes the outcome as DOWN and a wrong SELL or AVOID fixes it as UP.
-- ml_direction is the LightGBM member's direction, not the ensemble direction, so ml_correct scores that member.
+- ml_direction is the direction of the member the brief carried (the LightGBM member for rows written before
+  17 Nov 2026, which include every published aggregate, and the member the gate validated from then on, see
+  aer.ml.models.selected_prediction). The ensemble direction is not stored, and ml_correct scores that member.
 - The ML label in aer.ml.features is a return above a 10 basis point cost on unadjusted closes, so ml_correct
   and the training target are not the same quantity.
 """

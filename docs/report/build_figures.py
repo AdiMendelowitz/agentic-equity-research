@@ -390,7 +390,7 @@ def fig_detection() -> Figure:
     # A constant majority-class prediction has balanced accuracy 0.50, so the 0.5 line is that baseline; the raw
     # majority accuracy in the data is a different metric and is not drawn on this axis.
     reference = reference_line(ax)
-    reference.set_label("0.50: chance and majority-class balanced accuracy")
+    reference.set_label("0.50, chance and majority-class balanced accuracy")
     handles = [reference]
     oracle_means: list[float] = []
     for x in signals:
@@ -422,7 +422,7 @@ def fig_detection() -> Figure:
     ax.set_xlabel("Injected signal strength")
     ax.set_ylabel("Balanced accuracy (out of sample)")
     ax.set_title(
-        f"Injected-signal detection, 95% normal interval ({seeds} seeds, {len(rows)} cells)",
+        f"Control v2 signal detection, 95% normal interval ({seeds} seeds, {len(rows)} cells)",
         fontsize=10,
     )
     fig.tight_layout(rect=(0, 0.17, 1, 1))

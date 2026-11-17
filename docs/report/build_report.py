@@ -40,8 +40,7 @@ GATE_VALUES = {"True": True, "False": False}
 FIGURES: tuple[tuple[str, str], ...] = (
     (
         "detection_curve.svg",
-        "Model and oracle balanced accuracy against injected signal strength, with the analytic ceiling "
-        "and the 0.50 chance line",
+        "Control version 2, model and oracle balanced accuracy against signal strength, with ceiling and 0.50 line",
     ),
     ("calibration.svg", "Hit rate by conviction bin with 95% Wilson intervals, against the 0.50 line"),
     ("recommendation_hit_rate.svg", "Hit rate by recommendation with 95% Wilson intervals"),
@@ -265,7 +264,7 @@ def _gate_note(summaries: Sequence[SignalSummary]) -> str:
     return (
         f"<p>The gate predicted on {first.gate_predicted} of {len(first.seeds)} seeds at signal {first.signal} "
         f"and on {last.gate_predicted} of {len(last.seeds)} at signal {last.signal}. The same seeds run at both "
-        f"strengths, so the comparison is paired: {comparison.discordant[0]} seeds predicted only at "
+        f"strengths, so the comparison is paired, with {comparison.discordant[0]} seeds predicted only at "
         f"{first.signal} and {comparison.discordant[1]} only at {last.signal} (exact McNemar test, two-sided "
         f"p = {comparison.paired_p_value:.3f}, added after the results were seen; Fisher's exact test, which "
         f"treats the seeds as independent and was reported first, gives p = {comparison.p_value:.3f}). "
@@ -443,8 +442,8 @@ def control_v3_section() -> str:
         "and it is not a leakage test.</p>"
         f"<p>{at_chance} of {len(cells)} cells score exactly 0.500, which is what a prediction of a single "
         "class scores. Such cells pull each mean towards 0.50 and narrow the zero-signal interval, so the "
-        "results describe the thresholded ensemble estimator without the gate applied, not the pipeline's "
-        "gated single-model prediction. The oracle thresholds the true conditional "
+        "results describe the thresholded ensemble estimator with the gate not applied; the pipeline's brief "
+        "carries the gated single-model prediction. The oracle thresholds the true conditional "
         "mean at the cost; it is not the rule that maximises balanced accuracy, and the analytic ceiling is "
         "for the zero-cost sign problem, so the gaps are descriptive.</p>"
         '<table id="control-v3-primary"><caption>Pre-registered primary endpoints</caption>'

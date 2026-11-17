@@ -324,7 +324,7 @@ L 454.564886 141.709286
     <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #374151" x="454.564886" y="237.882575" transform="rotate(-0 454.564886 237.882575)">gate predicted 6/20</text>
    </g>
    <g id="text_18">
-    <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: middle" x="277.781172" y="18.72" transform="rotate(-0 277.781172 18.72)">Injected-signal detection, 95% normal interval (20 seeds, 60 cells)</text>
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: middle" x="277.781172" y="18.72" transform="rotate(-0 277.781172 18.72)">Control v2 signal detection, 95% normal interval (20 seeds, 60 cells)</text>
    </g>
    <g id="line2d_35">
     <defs>
@@ -360,39 +360,39 @@ z
   </g>
   <g id="legend_1">
    <g id="line2d_38">
-    <path d="M 31.783359 303.135187 
-L 40.783359 303.135187 
-L 49.783359 303.135187 
+    <path d="M 31.869141 303.135187 
+L 40.869141 303.135187 
+L 49.869141 303.135187 
 " style="fill: none; stroke-dasharray: 3.7,1.6; stroke-dashoffset: 0; stroke: #374151"/>
    </g>
    <g id="text_20">
-    <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: start" x="56.983359" y="306.285187" transform="rotate(-0 56.983359 306.285187)">0.50: chance and majority-class balanced accuracy</text>
+    <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: start" x="57.069141" y="306.285187" transform="rotate(-0 57.069141 306.285187)">0.50, chance and majority-class balanced accuracy</text>
    </g>
    <g id="line2d_39">
-    <path d="M 31.783359 316.635891 
-L 40.783359 316.635891 
-L 49.783359 316.635891 
+    <path d="M 31.869141 316.635891 
+L 40.869141 316.635891 
+L 49.869141 316.635891 
 " style="fill: none; stroke: #b5604f; stroke-width: 1.4; stroke-linecap: square"/>
    </g>
    <g id="text_21">
-    <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: start" x="56.983359" y="319.785891" transform="rotate(-0 56.983359 319.785891)">oracle</text>
+    <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: start" x="57.069141" y="319.785891" transform="rotate(-0 57.069141 319.785891)">oracle</text>
    </g>
    <g id="line2d_40">
-    <path d="M 306.176484 303.135187 
-L 315.176484 303.135187 
-L 324.176484 303.135187 
+    <path d="M 306.090703 303.135187 
+L 315.090703 303.135187 
+L 324.090703 303.135187 
 " style="fill: none; stroke-dasharray: 1.4,2.31; stroke-dashoffset: 0; stroke: #c08a4a; stroke-width: 1.4"/>
    </g>
    <g id="text_22">
-    <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: start" x="331.376484" y="306.285187" transform="rotate(-0 331.376484 306.285187)">analytic ceiling</text>
+    <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: start" x="331.290703" y="306.285187" transform="rotate(-0 331.290703 306.285187)">analytic ceiling</text>
    </g>
    <g id="line2d_41">
     <g>
-     <use xlink:href="#m523eb39a7a" x="315.176484" y="316.635891" style="fill: #4c78a8; stroke: #4c78a8"/>
+     <use xlink:href="#m523eb39a7a" x="315.090703" y="316.635891" style="fill: #4c78a8; stroke: #4c78a8"/>
     </g>
    </g>
    <g id="text_23">
-    <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: start" x="331.376484" y="319.785891" transform="rotate(-0 331.376484 319.785891)">model, 95% normal interval (1.96)</text>
+    <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: start" x="331.290703" y="319.785891" transform="rotate(-0 331.290703 319.785891)">model, 95% normal interval (1.96)</text>
    </g>
   </g>
  </g>
