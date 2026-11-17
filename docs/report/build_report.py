@@ -141,7 +141,7 @@ def cohort() -> list[CohortStep]:
     resolved = sum(int(r["n_resolved"]) for r in rows if r["recommendation"] != "HOLD")
     correct = sum(int(r["n_synth_correct"]) for r in rows if r["recommendation"] != "HOLD")
     return [
-        CohortStep("Briefs in the evaluation store", briefs),
+        CohortStep("Ticker-days in the evaluation store", briefs),
         CohortStep("HOLD, no scored outcome", hold),
         CohortStep("Actionable calls (BUY, SELL or AVOID)", briefs - hold),
         CohortStep("Actionable calls not resolved", briefs - hold - resolved),
@@ -223,18 +223,49 @@ def _gate_label(row: SeedRow) -> str:
     return "predicted" if row.gate_predicted else "abstained"
 
 
+# Sensitivity of the 17 November 2026 correction, as printed by the private extractor from the 9 November snapshot:
+# (rule, correct calls, resolved calls, correct ML predictions, resolved ML predictions). Historical, so fixed here.
+CORRECTION_ROWS: tuple[tuple[str, int, int, int, int], ...] = (
+    ("Every row, as first published on 9 November", 342, 707, 74, 145),
+    ("First run of each ticker-day (used on this page)", 314, 629, 64, 120),
+    ("Last run of each ticker-day", 314, 629, 63, 121),
+)
+
+
+def correction_note() -> str:
+    body = "".join(
+        f'<tr><td>{html.escape(rule)}</td><td class="n">{k:,} of {n:,} ({k / n:.3f})</td>'
+        f'<td class="n">{mk} of {mn} ({mk / mn:.3f})</td></tr>'
+        for rule, k, n, mk, mn in CORRECTION_ROWS
+    )
+    return (
+        "<p><strong>Correction, 17 November 2026.</strong> The aggregates first published on 9 November counted "
+        "same-day reruns of the pipeline as separate calls. Of the 2,609 rows first published, 288 were second or "
+        "later runs of a ticker-day already in the store, scored against the same five-day outcome as the first run, "
+        "so they were not independent observations. "
+        "Every evaluation figure on this page now counts one decision per ticker-day and keeps the first run of each "
+        "day. "
+        "The conclusion is unchanged.</p>"
+        '<table id="correction"><caption>Scored cohort under each counting rule</caption><thead><tr>'
+        '<th scope="col">Rule</th><th scope="col">Recorded calls correct</th>'
+        '<th scope="col">ML predictions correct</th></tr></thead>'
+        f"<tbody>{body}</tbody></table>"
+    )
+
+
 def cohort_section() -> str:
     steps = cohort()
     resolved, correct = steps[4].count, steps[5].count
     body = "".join(f'<tr><td>{html.escape(s.label)}</td><td class="n">{s.count:,}</td></tr>' for s in steps)
     return (
         '<section id="cohort"><h2>Evaluation cohort</h2>'
-        "<p>Accuracy is measured on resolved actionable calls only. Each step below is computed from the data "
-        "file named under the table.</p>"
-        f'<table><caption>From all briefs to the scored cohort</caption><thead><tr><th scope="col">Step</th>'
+        "<p>Accuracy is measured on resolved actionable calls only, one decision per ticker-day. Each step below "
+        "is computed from the data file named under the table.</p>"
+        f'<table><caption>From all ticker-days to the scored cohort</caption><thead><tr><th scope="col">Step</th>'
         f'<th scope="col">Rows</th></tr></thead><tbody>{body}</tbody></table>'
-        f"<p>Accuracy on the scored cohort: {correct:,} of {resolved:,} ({correct / resolved:.3f}).</p>"
-        '<p class="source">Source: <code>docs/data/eval_recommendation.csv</code></p></section>'
+        f"<p>Accuracy on the scored cohort is {correct:,} of {resolved:,} ({correct / resolved:.3f}).</p>"
+        '<p class="source">Source: <code>docs/data/eval_recommendation.csv</code></p>'
+        f"{correction_note()}</section>"
     )
 
 

@@ -382,13 +382,27 @@ def test_outcome_counts_follow_from_the_directional_scoring_rule() -> None:
 
 
 def test_baselines_match_the_committed_counts() -> None:
-    assert build_report.outcome_counts(_eval_rows()) == (317, 390)
+    assert build_report.outcome_counts(_eval_rows()) == (279, 350)
     rates = build_report.baselines(_eval_rows())
     assert set(rates) == {"always_bearish", "always_bullish", "class_matched_random"}
-    assert rates["always_bearish"] == pytest.approx(390 / 707)
-    assert rates["always_bullish"] == pytest.approx(317 / 707)
+    assert rates["always_bearish"] == pytest.approx(350 / 629)
+    assert rates["always_bullish"] == pytest.approx(279 / 629)
     assert rates["always_bearish"] + rates["always_bullish"] == pytest.approx(1.0)
-    assert rates["class_matched_random"] == pytest.approx((276 / 707) * (317 / 707) + (431 / 707) * (390 / 707))
+    assert rates["class_matched_random"] == pytest.approx((244 / 629) * (279 / 629) + (385 / 629) * (350 / 629))
+
+
+def test_correction_note_matches_the_committed_data(site: Path) -> None:
+    steps = build_report.cohort()
+    used = build_report.CORRECTION_ROWS[1]
+    assert (used[1], used[2]) == (steps[5].count, steps[4].count)
+    gate = list(csv.DictReader((DATA_DIR / "eval_ml_gate.csv").read_text(encoding="utf-8").splitlines()))
+    assert (used[3], used[4]) == (
+        sum(int(r["n_ml_correct"]) for r in gate),
+        sum(int(r["n_ml_resolved"]) for r in gate),
+    )
+    rows = _tables(site)["correction"]
+    assert [r[0] for r in rows] == [rule for rule, *_ in build_report.CORRECTION_ROWS]
+    assert rows[1][1] == f"{steps[5].count} of {steps[4].count} ({steps[5].count / steps[4].count:.3f})"
 
 
 def test_the_scoring_rule_the_baselines_assume_is_the_recorded_one() -> None:
@@ -409,28 +423,28 @@ def test_outcome_counts_need_resolved_calls() -> None:
 
 
 def test_design_effect_one_reproduces_the_plain_wilson_interval() -> None:
-    plain = build_report.wilson_interval(342, 707)
-    first = build_report.design_effect_rows(342, 707)[0]
+    plain = build_report.wilson_interval(314, 629)
+    first = build_report.design_effect_rows(314, 629)[0]
     assert first.effect == 1
     assert first.interval.low == pytest.approx(plain.low, abs=1e-12)
     assert first.interval.high == pytest.approx(plain.high, abs=1e-12)
 
 
 def test_design_effect_widens_the_interval_and_divides_the_count() -> None:
-    rows = build_report.design_effect_rows(342, 707)
+    rows = build_report.design_effect_rows(314, 629)
     assert [r.effect for r in rows] == [1, 2, 3, 5, 10]
     widths = [r.interval.high - r.interval.low for r in rows]
     assert all(a < b for a, b in zip(widths, widths[1:]))
     for row in rows:
-        assert row.effective_n == pytest.approx(707 / row.effect)
+        assert row.effective_n == pytest.approx(629 / row.effect)
         assert row.contains_chance == (row.interval.low <= 0.5 <= row.interval.high)
 
 
 def test_baselines_table_shows_exact_counts_and_rates(site: Path) -> None:
     rows = _tables(site)["baselines"]
-    assert rows[0] == ["Recorded calls", "342", f"{342 / 707:.3f}"]
-    assert rows[1] == ["Always bearish", "390", f"{390 / 707:.3f}"]
-    assert rows[2] == ["Always bullish", "317", f"{317 / 707:.3f}"]
+    assert rows[0] == ["Recorded calls", "314", f"{314 / 629:.3f}"]
+    assert rows[1] == ["Always bearish", "350", f"{350 / 629:.3f}"]
+    assert rows[2] == ["Always bullish", "279", f"{279 / 629:.3f}"]
     rates = build_report.baselines(_eval_rows())
     assert rows[3] == ["Class-matched random", "n/a", f"{rates['class_matched_random']:.3f}"]
     text = (site / "index.html").read_text(encoding="utf-8")
@@ -455,7 +469,7 @@ def test_design_effect_table_has_one_row_per_effect(site: Path) -> None:
     assert len(rows) == len(build_report.DESIGN_EFFECTS)
     for row, effect in zip(rows, build_report.DESIGN_EFFECTS, strict=True):
         assert row[0] == f"{effect:g}"
-        assert row[1] == f"{707 / effect:.1f}"
+        assert row[1] == f"{629 / effect:.1f}"
         assert row[3] in {"yes", "no"}
 
 

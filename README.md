@@ -17,7 +17,7 @@
 
 ## Results at a glance
 
-- **No measurable edge on recorded output.** 342 of 707 resolved calls were correct (0.484, about 0.45 to 0.52), and detecting 0.55 against 0.50 would need about 783 independent calls. A rule that always says down scores 390 of 707 (0.552) on the same calls.
+- **No measurable edge on recorded output.** 314 of 629 resolved calls were correct (0.499, about 0.46 to 0.54), counting one decision per ticker and day, and detecting 0.55 against 0.50 would need about 780 independent calls. A rule that always says down scores 350 of 629 (0.556) on the same calls. These figures were corrected on 17 November 2026; the correction note is under "What the evaluation found".
 - **The harness detects a signal that exists, under a known generator.** In a pre-registered control on synthetic prices, the two-model ensemble (only its LightGBM member is Platt-calibrated), scored on every seed whether or not the gate passed, reaches balanced accuracy 0.530 and 0.565 at the two non-zero signal strengths, both above 0.50 after a Holm adjustment, and stays within 0.03 of chance at zero signal. The zero-signal mean is itself 0.516, and the lower bound at 0.3 (0.519) lies inside the zero-signal interval, so only the strongest signal is clearly apart from the noise result. A rule that thresholds the true conditional mean is 0.104 and 0.145 ahead.
 - **The ML gate barely separates signal from noise.** In that control it passed in 4 of 46 seeds with no signal and 11 of 46 at the strongest, a descriptive count and not a tested endpoint; a conformal gate is the next candidate, to be tested against matched-coverage selection.
 - **The multi-agent design is not yet justified by evidence.** Nothing here compares the five agents with one well-prompted model on the same data; that comparison is on the roadmap.
@@ -83,18 +83,20 @@ Blue boxes are deterministic code, lavender the agents, rose the synthesis model
 
 ## What the evaluation found
 
-The evaluation found no measurable edge. Of 2,609 briefs across 51 tickers, 707 were resolved against a five-day forward return, and 342 of those were correct, an accuracy on resolved actionable calls of 0.484 (about 0.45 to 0.52 by normal approximation). That interval contains 0.50. None of the 1,766 HOLD briefs received a scored correctness outcome, and 136 other briefs were not resolved, so this figure describes the resolved calls only.
+The evaluation found no measurable edge. The unit is the ticker-day, one brief per ticker and day. Of 2,321 ticker-days across 51 tickers, 629 were resolved against a five-day forward return, and 314 of those were correct, an accuracy on resolved actionable calls of 0.499 (about 0.46 to 0.54 by normal approximation). That interval contains 0.50. None of the 1,572 HOLD briefs received a scored correctness outcome, and 120 other briefs were not resolved, so this figure describes the resolved calls only.
 
-<p align="center"><img src="docs/diagrams/evaluation-funnel.svg" alt="Evaluation cohort: 2,609 briefs, 843 actionable, 707 resolved, 342 correct" width="660"></p>
+**Correction, 17 November 2026.** The aggregates first published on 9 November counted same-day reruns of the pipeline as separate calls. Of the 2,609 rows first published, 288 were second or later runs of a ticker-day already in the store, scored against the same five-day outcome as the first run, so they were not independent observations. Every evaluation figure in this README and on the report page now counts one decision per ticker-day and keeps the first run of each day. The scored cohort moved from 342 correct of 707 (0.484) to 314 of 629 (0.499), and the resolved ML predictions from 74 correct of 145 to 64 of 120. Keeping the last run of each day instead gives the same 314 of 629, and 63 of 121 for the ML predictions. The conclusion is unchanged, and the cause, evaluation writes without a run identifier, is on the roadmap.
+
+<p align="center"><img src="docs/diagrams/evaluation-funnel.svg" alt="Evaluation cohort, 2,321 briefs (one per ticker-day), 749 actionable, 629 resolved, 314 correct" width="660"></p>
 
 <p align="center"><img src="docs/img/calibration.svg" alt="Hit rate by conviction bin with intervals, against the 0.50 line" width="640"></p>
 
-Detecting a hit rate of 0.55 against 0.50 with 80% power at a two-sided 5% level needs about 780 independent resolved calls (783 by `src/aer/evaluation/power.py`). The sample has 707, and overlapping five-day windows make the independent count lower. The published evaluation could not distinguish a small edge from none.
+Detecting a hit rate of 0.55 against 0.50 with 80% power at a two-sided 5% level needs about 780 independent resolved calls (783 by `src/aer/evaluation/power.py`). The sample has 629, and overlapping five-day windows make the independent count lower. The published evaluation could not distinguish a small edge from none.
 
 <details>
 <summary>Results by conviction, recommendation and ML gate (descriptive only)</summary>
 
-By conviction bin, the 0.6 bin scored 135 of 305 (0.443), the 0.7 bin 186 of 349 (0.533) and the 0.8 bin 19 of 48 (0.396). By recommendation, BUY scored 114 of 276 (0.413), SELL 121 of 246 (0.492) and AVOID 107 of 185 (0.578). All 1,766 HOLD rows were never resolved. The ML gate predicted on 169 of 2,374 rows, and 74 of the 145 resolved predictions were correct (0.510); those recorded predictions are the LightGBM member's direction, not the calibrated ensemble that the control scores.
+By conviction bin, the 0.6 bin scored 119 of 261 (0.456), the 0.7 bin 174 of 316 (0.551) and the 0.8 bin 19 of 48 (0.396). By recommendation, BUY scored 104 of 244 (0.426), SELL 107 of 217 (0.493) and AVOID 103 of 168 (0.613). All 1,572 HOLD rows were never resolved. The ML gate predicted on 139 of 2,112 rows, and 64 of the 120 resolved predictions were correct (0.533); those recorded predictions are the LightGBM member's direction, while the control scores the calibrated ensemble.
 
 </details>
 
@@ -148,7 +150,7 @@ The first run failed as a design and stays on record in `docs/data/detection_cur
 - No real evaluation observation is published at row level, and the evaluation aggregates carry no ticker, week or date dimension. Synthetic control rows and run dates are published.
 - Up to v0.1.2 the ML layer had three leakage defects, fixed in v0.1.3 with a test each. The calibration block followed the training block with no purge gap. The logged Brier score was computed on rows the model was fitted on. The Brier check scored the calibrated ensemble on the rows its calibrator was fitted on. Calibration is now fitted on out-of-fold predictions, and a purged holdout block is used only for evaluation.
 - Control version 2 measures one uncalibrated classifier per seed, not the deployed ensemble; version 3 measures the ensemble with the gate's abstention not applied. In version 3 the model scores slightly above 0.50 on pure noise, within the pre-registered margin. In the exploratory analysis the pooled balanced accuracy is at most 0.009 above 0.50 at the upper end of its 95% interval; that bounds this statistic, not every form of dependence, and the cause is not identified.
-- Samples are small, with 707 resolved calls and 145 resolved ML predictions.
+- Samples are small, with 629 resolved calls and 120 resolved ML predictions, counted one per ticker-day.
 - Only the LightGBM member of the ensemble is Platt-calibrated, the logged out-of-fold Brier score belongs to the model chosen on the same folds, and the version 3 seed count was planned from version 2 variability, which the strongest signal slightly exceeded.
 - The control's oracle thresholds the true conditional mean at the cost and is not the rule that maximises balanced accuracy; the analytic ceiling is for the zero-cost sign problem.
 - The control experiment uses one synthetic signal family; it shows the harness can find that signal, not that real prices carry one.
@@ -156,7 +158,7 @@ The first run failed as a design and stays on record in `docs/data/detection_cur
 - The agents emit analysis and a confidence, not a directional call. Each per-agent opinion row therefore stores the synthesis recommendation, so a per-agent hit rate from those rows measures the synthesis and not the agent.
 - The specification's own wording, that it was fixed before the run, claims more than this repository can show; the item above states what can be checked. Its lower bounds at the non-zero signals are individual one-sided bounds, not adjusted, beside Holm-adjusted p-values.
 - Recorded calls are scored by direction at zero on adjusted closes, while the ML label is a five-day return above a 10 basis point cost on unadjusted closes, so the recorded ML accuracy and the training target are not the same quantity.
-- The gate applies its cross-validation criteria to the better single model, and from this release the brief carries that model's prediction, with the two-model ensemble probability beside it. The 145 published ML predictions were recorded under the earlier rule, which kept the LightGBM member's direction whichever model the gate chose. The holdout Brier comparison is logged as a diagnostic and gates nothing.
+- The gate applies its cross-validation criteria to the better single model, and from this release the brief carries that model's prediction, with the two-model ensemble probability beside it. The 139 published ML predictions (120 resolved) were recorded under the earlier rule, which kept the LightGBM member's direction whichever model the gate chose. The holdout Brier comparison is logged as a diagnostic and gates nothing.
 - The report page is deployed by its own workflow after the report tests and the redaction scan; it does not wait for the main CI run.
 - Briefs are scored against a five-day move, while the underlying thesis spans weeks to months.
 - The published aggregates were not re-scored with the HOLD rule, which was defined after they were seen.
@@ -171,6 +173,7 @@ Planned next:
 - Dependence-aware intervals for the live evaluation, with the method published.
 - A conformal gate tested against matched-coverage selection, and a single-agent against multi-agent comparison.
 - Indicators written in this repository in place of `pandas-ta`.
+- Evaluation writes tagged with a run identifier and unique on ticker-day, so a rerun of the pipeline cannot add a second row for the same ticker-day.
 
 ## Author and licence
 
