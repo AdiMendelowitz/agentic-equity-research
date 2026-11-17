@@ -175,7 +175,7 @@ Each model call tries the free providers first and reaches the paid model only w
 
 ```mermaid
 flowchart TD
-    call([Model call requested]) --> tier{Valid tier?}
+    begin([Model call requested]) --> tier{Valid tier?}
     tier -->|No| valueerror([ValueError])
     tier -->|Yes| fits{Prompt within the free context limit?}
     fits -->|Yes| primary[Primary free provider]
@@ -200,7 +200,7 @@ flowchart TD
     classDef paid fill:#F5E6CF,stroke:#B08550,stroke-width:1.5px,color:#1F2937
     classDef good fill:#D5EBDD,stroke:#4E8F6E,stroke-width:1.5px,color:#1F2937
     classDef bad fill:#F3D6CF,stroke:#B5604F,stroke-width:1.5px,color:#1F2937
-    class call terminal
+    class begin terminal
     class tier,fits,ok1,ok2,local,ok3,ok4 decision
     class primary,secondary,ollama free
     class paid paid

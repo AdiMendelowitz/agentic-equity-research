@@ -94,3 +94,17 @@ def test_readme_flowcharts_use_flowchart_shapes() -> None:
         assert "flowchart" in block
         assert "classDef" in block
         assert "([" in block, "each flowchart starts or ends at a terminator"
+
+
+# Mermaid flowchart keywords that fail as node ids on GitHub ("call" broke the routing chart on 17 Nov 2026).
+MERMAID_KEYWORDS = {"call", "click", "class", "classDef", "default", "end", "graph", "href", "style", "subgraph"}
+EDGE = r"(?:-->|-\.->)\s*(?:\|[^|]*\|\s*)?"
+NODE_WITH_SHAPE = re.compile(rf"(?:^\s*|{EDGE})(\w+)\s*[\[\(\{{]", re.M)
+
+
+def test_readme_flowcharts_use_no_keyword_as_a_node_id() -> None:
+    blocks = re.findall(r"```mermaid\n(.*?)```", README, flags=re.DOTALL)
+    for block in blocks:
+        ids = set(NODE_WITH_SHAPE.findall(block))
+        ids |= {i for line in re.findall(r"^\s*class (\S+) \w+$", block, re.M) for i in line.split(",")}
+        assert not ids & MERMAID_KEYWORDS, sorted(ids & MERMAID_KEYWORDS)
