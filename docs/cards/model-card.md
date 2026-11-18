@@ -4,7 +4,7 @@ This card follows the spirit of Model Cards for Model Reporting (Mitchell et al.
 
 ## Model details
 
-- **Models.** LightGBM and logistic regression (`models.py`), each behind a standard scaler. LightGBM uses 200 estimators, 31 leaves, minimum child samples 30, learning rate 0.05, column sample 0.8 and `is_unbalance=True`. Logistic regression uses `class_weight="balanced"`. The seed is 42 (`constants.py`).
+- **Models.** LightGBM and logistic regression (`models.py`), each behind a standard scaler. LightGBM uses 200 estimators, 31 leaves, minimum child samples 30, learning rate 0.05, column sample 0.8, row subsample 1.0 with bagging off and `is_unbalance=True`. Logistic regression uses `class_weight="balanced"`. The seed is 42 (`constants.py`).
 - **Features.** The columns in `FEATURE_COLS` (`constants.py`), built by `features.py`: 37 indicator and rolling-window columns such as RSI, MACD, Bollinger bands, moving averages, ATR, ADX and 52-week high and low distances. Two Ichimoku columns are excluded, one because it puts later closes on earlier rows and one because its row alignment was not verified.
 - **Label.** One when the five-day forward return exceeds the round-trip cost of 10 basis points, otherwise zero, on unadjusted closes with a guard for stock splits (`features.py`, `PREDICTION_HORIZON_DAYS = 5`, `ROUND_TRIP_COST_BPS = 10.0`).
 - **Validation.** Labelled rows are ordered in time as a cross-validation block, 10 dropped rows (`PURGE_GAP_BARS`) and a holdout block of 15% (`HOLDOUT_FRACTION`). Cross-validation uses `TimeSeriesSplit` with `N_CV_SPLITS = 5`, a gap of `PURGE_GAP_BARS` and `CV_TEST_SIZE_BARS = 55`. The holdout block is never used to fit anything and only scores a Brier diagnostic.
@@ -31,7 +31,7 @@ The lower bound at 0.3 lies inside the zero-signal interval, so only the stronge
 
 ## Effective configuration
 
-`subsample=0.8` is set on the LightGBM classifier without `subsample_freq`. LightGBM's API documents `subsample_freq` with a default of 0, which disables bagging. No fit in this repository, the control included, therefore used row subsampling. This is tracked as a known-limitation issue: https://github.com/AdiMendelowitz/agentic-equity-research/issues?q=label%3Aknown-limitation
+The LightGBM classifier sets `subsample=1.0` and leaves `subsample_freq` at 0, so every tree is grown on all training rows. Earlier releases set `subsample=0.8`, which LightGBM ignores while `subsample_freq` is 0, its documented default. No fit in this repository, the pre-registered control included, used row subsampling, and the change to 1.0 moves no fitted model and no published figure. `tests/ml/test_lgbm_config.py` pins both settings and checks that a fit with `subsample=0.5` and no frequency grows the same trees as the stated configuration.
 
 ## Limitations
 

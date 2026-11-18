@@ -348,6 +348,7 @@ The first run failed as a design and stays on record in `docs/data/detection_cur
 - Briefs are scored against a five-day move, while the underlying thesis spans weeks to months.
 - The published aggregates were not re-scored with the HOLD rule, which was defined after they were seen.
 - `numba` is overridden in `pyproject.toml` so that `pandas-ta` resolves on Python 3.14.
+- LightGBM's `subsample` read 0.8 in earlier releases with no `subsample_freq`, so no fit made by this code, the control included, used row subsampling. It now reads 1.0, which states the configuration that ran and changes no fit.
 - Live mode is absent.
 
 ## Roadmap

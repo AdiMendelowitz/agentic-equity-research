@@ -26,7 +26,9 @@ LGBM_N_ESTIMATORS: int = 200
 LGBM_NUM_LEAVES: int = 31
 LGBM_MIN_CHILD_SAMPLES: int = 30  # raised from 20 - small fold sizes need more regularisation
 LGBM_LEARNING_RATE: float = 0.05
-LGBM_SUBSAMPLE: float = 0.8
+# LightGBM ignores subsample while subsample_freq is 0, its default, and no caller sets a frequency, so rows are never
+# subsampled. The earlier value 0.8 was therefore inert, and 1.0 states the configuration every published fit used.
+LGBM_SUBSAMPLE: float = 1.0
 LGBM_COLSAMPLE_BYTREE: float = 0.8
 
 # Model persistence
