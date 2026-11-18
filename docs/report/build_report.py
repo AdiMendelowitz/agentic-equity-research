@@ -245,7 +245,7 @@ def correction_note() -> str:
         "so they were not independent observations. "
         "Every evaluation figure on this page now counts one decision per ticker-day and keeps the first run of each "
         "day. "
-        "The conclusion is unchanged.</p>"
+        "Under each counting rule in the table below, recorded accuracy stays close to 0.50.</p>"
         '<table id="correction"><caption>Scored cohort under each counting rule</caption><thead><tr>'
         '<th scope="col">Rule</th><th scope="col">Recorded calls correct</th>'
         '<th scope="col">ML predictions correct</th></tr></thead>'
@@ -306,8 +306,9 @@ def _gate_note(summaries: Sequence[SignalSummary]) -> str:
 def detection_section(summaries: Sequence[SignalSummary]) -> str:
     rows = "".join(_summary_row(s) for s in summaries)
     return (
-        '<section id="control"><h2>Control experiment</h2>'
-        "<p>Synthetic prices with a known injected signal; no market data. Seeds are treated as independent "
+        '<section id="control"><h2>Control experiment, version 2</h2>'
+        "<p>This is version 2 of the control, kept on record beside the pre-registered version 3 in the next section. "
+        "Synthetic prices with a known injected signal; no market data. Seeds are treated as independent "
         "replications. Every interval in the table below is a 95% Student's t interval over seeds "
         f"({_t_note(summaries)}). The oracle-minus-model gap is computed within each seed, so it is paired.</p>"
         "<p>The expectations fixed before the run, in <code>src/aer/demo/control.py</code>, use a normal "
@@ -331,7 +332,8 @@ def _seed_table(summary: SignalSummary) -> str:
     )
     return (
         f"<h3>Signal {summary.signal}</h3>"
-        f'<table id="seeds-{summary.signal}"><caption>Per-seed results at signal {summary.signal}</caption>'
+        f'<table id="seeds-{summary.signal}"><caption>Per-seed results at signal {summary.signal}, '
+        "version 2</caption>"
         '<thead><tr><th scope="col">Seed</th><th scope="col">Gate</th><th scope="col">Model</th>'
         '<th scope="col">Oracle</th><th scope="col">Oracle minus model</th>'
         f'<th scope="col">Out-of-sample rows</th></tr></thead><tbody>{body}</tbody></table>'
@@ -341,8 +343,9 @@ def _seed_table(summary: SignalSummary) -> str:
 def seeds_section(summaries: Sequence[SignalSummary]) -> str:
     tables = "".join(_seed_table(s) for s in summaries)
     return (
-        '<section id="control-seeds"><h2>Control experiment: per-seed results</h2>'
-        "<p>Every row of the control data, rounded to three decimals. Model and oracle figures are "
+        '<section id="control-seeds"><h2>Control experiment, version 2, per-seed results</h2>'
+        "<p>Every row of the version 2 control data, rounded to three decimals. The version 3 rows are in "
+        "<code>docs/data/detection_curve_v3.csv</code>. Model and oracle figures are "
         "out-of-sample balanced accuracy.</p>"
         f'{tables}<p class="source">Source: <code>docs/data/detection_curve.csv</code></p></section>'
     )
@@ -678,6 +681,43 @@ def baselines_section() -> str:
     )
 
 
+LIMITS: tuple[str, ...] = (
+    (
+        "<li>The control experiments use one synthetic signal family. They show the harness can find that "
+        "signal and say nothing about whether real prices carry one.</li>"
+    ),
+    (
+        "<li>Version 2 of the control measures one uncalibrated classifier per seed. Version 3 measures the "
+        "two-model ensemble with the gate's abstention not applied, and only its LightGBM member is "
+        "Platt-calibrated.</li>"
+    ),
+    (
+        "<li>LightGBM row subsampling was never active. Earlier releases set <code>subsample</code> to 0.8 "
+        "with no <code>subsample_freq</code>, which LightGBM ignores, so no fit made by this code, the "
+        "pre-registered control included, used row subsampling.</li>"
+    ),
+    (
+        "<li>Recorded calls are scored by direction at zero on adjusted closes, while the ML label is a "
+        "five-day return above the round-trip cost on unadjusted closes, so the recorded ML accuracy and "
+        "the training target measure different quantities.</li>"
+    ),
+    ("<li>Briefs are scored against a five-day move, while the underlying thesis spans weeks to " "months.</li>"),
+    (
+        "<li>Calls on the same ticker or day are dependent, and the published data carry no ticker or date, "
+        "so the dependence cannot be measured here; the design-effect table shows the interval under assumed "
+        "levels of it.</li>"
+    ),
+    (
+        "<li>The repository README lists further limits, and open defects are tracked as public GitHub issues "
+        "labelled known-limitation.</li>"
+    ),
+)
+
+
+def limits_section() -> str:
+    return f'<section id="limits"><h2>Limits</h2><ul>{"".join(LIMITS)}</ul></section>'
+
+
 def figures_section() -> str:
     items = "".join(
         f'<figure><img src="img/{name}" alt="{html.escape(alt)}" width="680">'
@@ -714,7 +754,7 @@ def render() -> str:
         "<p>Whole-sample aggregates only; no ticker, week or date dimension is published. "
         "No figure here is a trading result.</p>"
         f"{cohort_section()}{baselines_section()}{detection_section(summaries)}{control_v3_section()}"
-        f"{exploratory_section()}{seeds_section(summaries)}{figures_section()}</main>"
+        f"{exploratory_section()}{seeds_section(summaries)}{figures_section()}{limits_section()}</main>"
         f"{footer()}"
         "</body></html>\n"
     )

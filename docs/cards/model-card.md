@@ -27,7 +27,7 @@ A research demonstration of an evaluation method. It is not investment advice an
 
 The lower bound at 0.3 lies inside the zero-signal interval, so only the strongest signal is clearly apart from the noise result.
 
-**Recorded output.** 314 of 629 resolved calls were correct (0.499, about 0.46 to 0.54), counting one decision per ticker and day. Detecting 0.55 against 0.50 would need about 780 independent calls. A rule that always says down scores 350 of 629 (0.556) on the same calls. The ML gate predicted on 139 of 2,112 rows, and 64 of the 120 resolved predictions were correct (0.533). These recorded predictions are the LightGBM member's direction, while the control scores the calibrated ensemble. The figures were corrected on 17 November 2026.
+**Recorded output.** 314 of 629 resolved calls were correct (0.499, 95% Wilson interval 0.460 to 0.538), counting one decision per ticker and day. Detecting 0.55 against 0.50 would need about 780 independent calls. A rule that always says down scores 350 of 629 (0.556) on the same calls. The ML gate predicted on 139 of 2,112 rows, and 64 of the 120 resolved predictions were correct (0.533). These recorded predictions are the LightGBM member's direction, while the control scores the calibrated ensemble. The figures were corrected on 17 November 2026.
 
 ## Effective configuration
 

@@ -22,7 +22,7 @@ The control files carry one row per seed and signal strength. Version 3 records 
 
 ## Unit of analysis
 
-The unit is the ticker-day, meaning one brief per ticker and day. The README reports 2,321 ticker-days across 51 tickers, of which 629 were resolved against a five-day forward return.
+The unit is the ticker-day, meaning one brief per ticker and day. The README reports 2,321 ticker-days across 51 tickers. Of these, 749 were actionable calls (BUY, SELL or AVOID) and 629 of those were resolved against a five-day forward return; HOLD days carry no scored outcome.
 
 On 17 November 2026 the evaluation aggregates were corrected. The figures first published on 9 November counted same-day reruns as separate calls. Of the 2,609 rows first published, 288 were second or later runs of a ticker-day already in the store. All figures now count one decision per ticker-day and keep the first run of each day. The scored cohort moved from 342 correct of 707 to 314 of 629.
 
@@ -62,9 +62,10 @@ The repository is released under the MIT licence (`LICENSE`, copyright Adi Mende
 From the repository root:
 
 ```bash
+uv sync --extra dev
 uv run python docs/report/build_figures.py
 uv run python docs/report/build_report.py --out site
 uv run python docs/report/reproduce.py
 ```
 
-`build_figures.py` regenerates the figures from `docs/data`, and `build_report.py` computes every number on the report page from a file there, recording an input hash in the footer. `reproduce.py` is added in the same release as this card.
+`build_figures.py` regenerates the figures from `docs/data`, and `build_report.py` computes every number on the report page from a file there, recording an input hash in the footer. `reproduce.py` re-runs the pre-registered control and the figure script and compares their output with the committed files, the figures after normalising the sign of zero and hashed element ids, then prints `RESULT: REPRODUCED` or `RESULT: DIFFERS`.
