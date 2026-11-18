@@ -334,7 +334,7 @@ def _cells_v3() -> list[CellV3]:
 def _verdict_text(zero_signal: bool, verdict: bool | None) -> str:
     if verdict is None:
         return "not evaluated"
-    claim = "within the margin of chance" if zero_signal else "above chance"
+    claim = "equivalent to 0.50 within 0.03" if zero_signal else "above 0.50"
     return f"{claim}: met" if verdict else "not met"
 
 

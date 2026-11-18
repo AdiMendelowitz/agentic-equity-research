@@ -8,7 +8,7 @@ This card follows the spirit of Model Cards for Model Reporting (Mitchell et al.
 - **Features.** The columns in `FEATURE_COLS` (`constants.py`), built by `features.py`: 37 indicator and rolling-window columns such as RSI, MACD, Bollinger bands, moving averages, ATR, ADX and 52-week high and low distances. Two Ichimoku columns are excluded, one because it puts later closes on earlier rows and one because its row alignment was not verified.
 - **Label.** One when the five-day forward return exceeds the round-trip cost of 10 basis points, otherwise zero, on unadjusted closes with a guard for stock splits (`features.py`, `PREDICTION_HORIZON_DAYS = 5`, `ROUND_TRIP_COST_BPS = 10.0`).
 - **Validation.** Labelled rows are ordered in time as a cross-validation block, 10 dropped rows (`PURGE_GAP_BARS`) and a holdout block of 15% (`HOLDOUT_FRACTION`). Cross-validation uses `TimeSeriesSplit` with `N_CV_SPLITS = 5`, a gap of `PURGE_GAP_BARS` and `CV_TEST_SIZE_BARS = 55`. The holdout block is never used to fit anything and only scores a Brier diagnostic.
-- **Calibration.** A Platt sigmoid is fitted on the pooled out-of-fold LightGBM probabilities. Only the LightGBM member is calibrated. The ensemble probability is an F1-weighted soft vote of the calibrated LightGBM and the logistic probabilities.
+- **Calibration.** A Platt sigmoid is fitted on the pooled out-of-fold LightGBM probabilities. Only the LightGBM member is calibrated. The ensemble probability is an F1-weighted soft vote of the LightGBM probability, calibrated when a calibrator was fitted, and the logistic probability.
 - **Gate.** The model with the higher mean cross-validation macro F1 is selected, with ties going to logistic regression. The gate passes unless that model's mean F1 is below `CV_F1_MEAN_MINIMUM` (0.52) or its F1 standard deviation exceeds `CV_F1_STD_HARD_LIMIT` (0.15). When it fails, the layer abstains. `selected_prediction` returns the member the gate validated by the same rule, and the brief carries that prediction with the ensemble probability beside it.
 
 ## Intended use
@@ -19,15 +19,15 @@ A research demonstration of an evaluation method. It is not investment advice an
 
 **Pre-registered control, version 3.** The control scores the two-model ensemble on 46 fresh seeds per signal strength on synthetic prices, whether or not the gate passed.
 
-| Signal strength s | Model balanced accuracy | Pre-registered test | Verdict | Gate passed |
+| Signal strength s | Ensemble balanced accuracy, every seed | Pre-registered test | Verdict | Gate passed |
 | --- | --- | --- | --- | --- |
-| 0.0 | 0.516 | 90% interval 0.510 to 0.522 inside 0.47 to 0.53 | within the 0.03 margin of chance: met | 4 of 46 seeds |
-| 0.3 | 0.530 | lower bound 0.519, Holm-adjusted p below 0.001 | above chance: met | 5 of 46 seeds |
-| 0.6 | 0.565 | lower bound 0.547, Holm-adjusted p below 0.001 | above chance: met | 11 of 46 seeds |
+| 0.0 | 0.516 | 90% interval 0.510 to 0.522 inside 0.47 to 0.53 | equivalent to 0.50 within 0.03: met | 4 of 46 seeds |
+| 0.3 | 0.530 | lower bound 0.519, Holm-adjusted p below 0.001 | above 0.50: met | 5 of 46 seeds |
+| 0.6 | 0.565 | lower bound 0.547, Holm-adjusted p below 0.001 | above 0.50: met | 11 of 46 seeds |
 
-The lower bound at 0.3 lies inside the zero-signal interval, so only the strongest signal is clearly apart from the noise result.
+The superiority tests compare each strength with 0.50, and the 0.03 margin applies only to the equivalence test at zero signal. The lower bound at 0.3 lies inside the zero-signal interval, and no test between signal strengths was pre-registered, so the table supports comparisons with 0.50 only.
 
-**Recorded output.** 314 of 629 resolved calls were correct (0.499, 95% Wilson interval 0.460 to 0.538), counting one decision per ticker and day. Detecting 0.55 against 0.50 would need about 780 independent calls. A rule that always says down scores 350 of 629 (0.556) on the same calls. The ML gate predicted on 139 of 2,112 rows, and 64 of the 120 resolved predictions were correct (0.533). These recorded predictions are the LightGBM member's direction, while the control scores the calibrated ensemble. The figures were corrected on 17 November 2026.
+**Recorded output.** 314 of 629 resolved calls were correct (0.499, 95% Wilson interval 0.460 to 0.538), counting one decision per ticker and day. Detecting 0.55 against 0.50 would need about 780 independent calls under a two-sided test at the 5% level with 80% power, by the normal approximation in `src/aer/evaluation/power.py`. A rule that always says down scores 350 of 629 (0.556) on the same calls. The ML gate predicted on 139 of 2,112 rows, and 64 of the 120 resolved predictions were correct (0.533). These recorded predictions are the LightGBM member's direction, while the control scores the calibrated ensemble. The figures were corrected on 17 November 2026.
 
 ## Effective configuration
 

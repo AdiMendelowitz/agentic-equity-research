@@ -18,7 +18,7 @@ MIN_TRAINING_BARS: int = 400
 
 # Model selection skip criteria - COMBINED (mean and std checks)
 CV_F1_STD_HARD_LIMIT: float = 0.15
-CV_F1_MEAN_MINIMUM: float = 0.52  # below this mean F1 is near-random for binary classification
+CV_F1_MEAN_MINIMUM: float = 0.52  # minimum mean macro F1 the gate accepts, a hand-set threshold
 
 # LightGBM hyperparameters
 SEED: int = 42

@@ -192,7 +192,10 @@ class FittedEnsemble:
         return self.cv_f1_lgbm / total if total > 0 else 0.5
 
     def predict_proba_up(self, X: pd.DataFrame) -> np.ndarray:
-        """F1-weighted soft vote of the calibrated LightGBM and the logistic probabilities of the up class."""
+        """F1-weighted soft vote of the LightGBM and logistic probabilities of the up class.
+
+        The LightGBM probability is calibrated only when a calibrator was fitted.
+        """
         frame = X[list(self.features)]
         lgbm_prob = self.lgbm.predict_proba(frame)[:, 1]
         if self.calibrator is not None:

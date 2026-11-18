@@ -10,7 +10,7 @@ Two questions decide whether a published result can be trusted. The first is wha
 
 ## Decision
 
-The unit of every evaluation figure is one decision per ticker-day, keeping the first run of each day. Public figures first counted same-day reruns as separate calls. Of 2,609 rows first published, 288 were such reruns scored against the same outcome. The correction of 17 November 2026 moved the scored cohort from 342 correct of 707 to 314 of 629, with the old and new figures side by side in the README.
+The unit of every figure on recorded output is one decision per ticker-day, keeping the first run of each day. The pre-registered control counts one observation per seed and signal strength. Public figures first counted same-day reruns as separate calls. Of 2,609 rows first published, 288 were such reruns, and the 78 of them that were resolved calls had been scored against the same outcome as the first run. The correction of 17 November 2026 moved the scored cohort from 342 correct of 707 to 314 of 629, with the old and new figures side by side in the README.
 
 The detection control, version 3, is pre-registered. Its specification is `docs/prereg/control-v3.md`, with constants mirrored in `src/aer/demo/prereg_v3.py`. A hash covering the specification, `prereg_v3.py` and `control_v3.py` was posted in public issue 1 before the first public commit of results. It fixes 46 seeds per signal strength, a margin of 0.03, and an equivalence test at zero signal and Holm-adjusted superiority tests at the other two strengths.
 
@@ -22,7 +22,7 @@ The detection control, version 3, is pre-registered. Its specification is `docs/
 
 ## Consequences
 
-- Positive. A null result and its own correction are published, and the hashed specification fixes the analysis.
+- Positive. A null result and its own correction are published, and the hash posted in issue 1 shows that the specification existed before the public results.
 - Negative. Evaluation writes carry no run identifier, so the unit is applied when the aggregates are built. A run identifier is on the roadmap. The start of the run is recorded only in a local log.
 
 ## Enforced by

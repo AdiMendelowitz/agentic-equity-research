@@ -172,7 +172,7 @@ def run_walk_forward(ticker: str, as_of_date: date) -> WalkForwardResult:
 
             oos_signals: list[str] = []
             for oos_bar_idx in range(oos_start_bar, oos_end_bar):
-                # Slice price history up to this OOS bar (but keep IS-only before is_end_bar)
+                # The history passed below stays fixed at is_end_bar; only the signal date advances
                 signal_date = price_history.index[oos_bar_idx]
 
                 # Call signal_generator.generate() with IS-only history

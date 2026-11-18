@@ -2,7 +2,8 @@
 
 - _SC is sklearn's private _SigmoidCalibration. aer.ml.models fits it on pooled out-of-fold LightGBM
   probabilities (_fit_platt_calibrator); no calibrator is fitted in this module.
-- compute_ensemble: F1-weighted soft vote combining calibrated LightGBM prob and logistic prob.
+- compute_ensemble: F1-weighted soft vote combining the LightGBM prob and logistic prob; the LightGBM prob
+  is calibrated only when a calibrator was fitted.
 """
 
 from typing import Any

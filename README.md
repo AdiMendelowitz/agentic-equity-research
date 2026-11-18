@@ -19,14 +19,14 @@
 
 ## What it shows
 
-- **Measurement before claims.** A pre-registered control injects a known signal into synthetic prices and checks that the harness finds it, before any result on recorded output is read.
-- **Engineering that holds up to review.** Over 1,100 tests, hermetic imports, leakage tests, a type-error ratchet, secret and redaction scans, and a CI matrix on Python 3.12, 3.13 and 3.14 gate every release.
+- **Measurement before claims.** A pre-registered control injects a known signal into synthetic prices and checks that the harness finds it.
+- **Engineering that holds up to review.** Over 1,100 tests, hermetic imports, leakage tests, a type-error ratchet, and secret and redaction scans back the code, and a CI matrix on Python 3.12, 3.13 and 3.14 runs after every public push.
 - **Honest reporting.** The recorded calls show no measurable edge, a rule that always says down does better, and a counting error found in review was corrected in public with the old and new figures side by side.
 
 ## Results at a glance
 
-- **The harness detects a signal that exists, under a known generator.** In the pre-registered control the two-model ensemble (only its LightGBM member is Platt-calibrated), scored on every seed whether or not the gate passed, reaches balanced accuracy 0.530 and 0.565 at the two non-zero signal strengths, both above 0.50 after a Holm adjustment, and stays within 0.03 of chance at zero signal. The zero-signal mean is itself 0.516, and the lower bound at 0.3 (0.519) lies inside the zero-signal interval, so only the strongest signal is clearly apart from the noise result.
-- **No measurable edge on recorded output.** 314 of 629 resolved calls were correct (0.499, about 0.46 to 0.54), counting one decision per ticker and day, and detecting 0.55 against 0.50 would need about 780 independent calls. A rule that always says down scores 350 of 629 (0.556) on the same calls. These figures were corrected on 17 November 2026, and the correction note is under "What the evaluation found".
+- **The harness detects a signal that exists, under a known generator.** In the pre-registered control the two-model ensemble (only its LightGBM member is Platt-calibrated), scored on every seed whether or not the gate passed, reaches balanced accuracy 0.530 and 0.565 at the two non-zero signal strengths, both above 0.50 after a Holm adjustment, and stays within 0.03 of chance at zero signal. The zero-signal mean is itself 0.516, and the lower bound at 0.3 (0.519) lies inside the zero-signal interval. No test between signal strengths was pre-registered, so the control supports comparisons with 0.50 only.
+- **No measurable edge on recorded output.** 314 of 629 resolved calls were correct (0.499, 95% Wilson interval 0.460 to 0.538), counting one decision per ticker and day, and detecting 0.55 against 0.50 would need about 780 independent calls under a two-sided test at the 5% level with 80% power. A rule that always says down scores 350 of 629 (0.556) on the same calls. These figures were corrected on 17 November 2026, and the correction note is under "What the evaluation found".
 - **The ML gate barely separates signal from noise.** In the control it passed in 4 of 46 seeds with no signal and 11 of 46 at the strongest, a descriptive count and not a tested endpoint. A conformal gate is the next candidate, to be tested against matched-coverage selection.
 - **The multi-agent design is not yet justified by evidence.** Nothing here compares the five agents with one well-prompted model on the same data; that comparison is on the roadmap.
 
@@ -143,7 +143,7 @@ flowchart TD
         fund ~~~ tech ~~~ sent ~~~ macro ~~~ pos
     end
     agents --> synth[Synthesis] --> post[Post-processing] --> gate{Cross-validation passes the gate?}
-    gate -->|Yes| calib[Prediction with calibrated probability]
+    gate -->|Yes| calib[Prediction with ensemble probability]
     gate -->|No| abstain[Abstain, no ML prediction]
     calib --> brief([Brief stored for scoring])
     abstain --> brief
@@ -222,7 +222,7 @@ LightGBM and logistic regression with purged time-series cross-validation, out-o
 
 ## What the evaluation found
 
-The evaluation found no measurable edge. The unit is the ticker-day, one brief per ticker and day. Of 2,321 ticker-days across 51 tickers, 629 were resolved against a five-day forward return, and 314 of those were correct, an accuracy on resolved actionable calls of 0.499 (about 0.46 to 0.54 by normal approximation). That interval contains 0.50. None of the 1,572 HOLD briefs received a scored correctness outcome, and 120 other briefs were not resolved, so this figure describes the resolved calls only.
+The evaluation found no measurable edge. The unit is the ticker-day, one brief per ticker and day. Of 2,321 ticker-days across 51 tickers, 629 were resolved against a five-day forward return, and 314 of those were correct, an accuracy on resolved actionable calls of 0.499 (95% Wilson interval 0.460 to 0.538). That interval contains 0.50. None of the 1,572 HOLD briefs received a scored correctness outcome, and 120 other briefs were not resolved, so this figure describes the resolved calls only.
 
 ```mermaid
 flowchart TD
@@ -244,7 +244,7 @@ flowchart TD
     class incorrect bad
 ```
 
-**Correction, 17 November 2026.** The aggregates first published on 9 November counted same-day reruns of the pipeline as separate calls. Of the 2,609 rows first published, 288 were second or later runs of a ticker-day already in the store, scored against the same five-day outcome as the first run, so they were not independent observations. Every evaluation figure in this README and on the report page now counts one decision per ticker-day and keeps the first run of each day. The scored cohort moved from 342 correct of 707 (0.484) to 314 of 629 (0.499), and the resolved ML predictions from 74 correct of 145 to 64 of 120. Keeping the last run of each day instead gives the same 314 of 629, and 63 of 121 for the ML predictions. The conclusion is unchanged, and the cause, evaluation writes without a run identifier, is on the roadmap.
+**Correction, 17 November 2026.** The aggregates first published on 9 November counted same-day reruns of the pipeline as separate calls. Of the 2,609 rows first published, 288 were second or later runs of a ticker-day already in the store. The 78 of them that were resolved calls had been scored against the same five-day outcome as the first run, so they were not independent observations. Every figure on recorded output in this README and on the report page now counts one decision per ticker-day and keeps the first run of each day. The scored cohort moved from 342 correct of 707 (0.484) to 314 of 629 (0.499), and the resolved ML predictions from 74 correct of 145 to 64 of 120. Keeping the last run of each day instead gives the same 314 of 629, and 63 of 121 for the ML predictions. Under each counting rule, recorded accuracy stays close to 0.50. The cause, evaluation writes without a run identifier, is on the roadmap.
 
 <p align="center"><img src="docs/img/calibration.svg" alt="Hit rate by conviction bin with intervals, against the 0.50 line" width="640"></p>
 
@@ -265,11 +265,11 @@ A null result means little unless the harness can find a signal when one is ther
 
 The current control, version 3, is pre-registered. It scores the two-model ensemble on 46 fresh seeds per strength, on every seed whether or not the gate passed, so it measures the estimator and not the system with abstention. Its specification, `docs/prereg/control-v3.md`, was released in a public commit and hashed in [issue 1](https://github.com/AdiMendelowitz/agentic-equity-research/issues/1) before the first public commit of the results; the seed count comes from a power calculation for a margin of 0.03.
 
-| Signal strength s | Model balanced accuracy | Pre-registered test | Verdict | Gate passed |
+| Signal strength s | Ensemble balanced accuracy, every seed | Pre-registered test | Verdict | Gate passed |
 | --- | --- | --- | --- | --- |
-| 0.0 | 0.516 | 90% interval 0.510 to 0.522 inside 0.47 to 0.53 | within the 0.03 margin of chance: met | 4 of 46 seeds |
-| 0.3 | 0.530 | lower bound 0.519, Holm-adjusted p below 0.001 | above chance: met | 5 of 46 seeds |
-| 0.6 | 0.565 | lower bound 0.547, Holm-adjusted p below 0.001 | above chance: met | 11 of 46 seeds |
+| 0.0 | 0.516 | 90% interval 0.510 to 0.522 inside 0.47 to 0.53 | equivalent to 0.50 within 0.03: met | 4 of 46 seeds |
+| 0.3 | 0.530 | lower bound 0.519, Holm-adjusted p below 0.001 | above 0.50: met | 5 of 46 seeds |
+| 0.6 | 0.565 | lower bound 0.547, Holm-adjusted p below 0.001 | above 0.50: met | 11 of 46 seeds |
 
 A rule that thresholds the true conditional mean stays 0.104 and 0.145 ahead at s = 0.3 and 0.6. At zero signal the model is inside the margin but slightly above 0.50; the report page carries an exploratory analysis of that excess, whose cause is not identified. The command is `uv run python docs/report/run_control_v3.py`.
 
@@ -302,9 +302,9 @@ flowchart TD
     class balacc,expect verdict
 ```
 
-Five expectations, defined in `src/aer/demo/control.py`, were written down before the run in the private development history, and all five were met. They check the oracle against the ceiling, that the zero-signal interval contains 0.50, that the interval at 0.6 lies above 0.50, that accuracy rises with s, and that the model does not exceed the oracle. They are checks on one run, not five independent confirmations.
+Five expectations, defined in `src/aer/demo/control.py`, were written down before the run in the private development history, and all five were met. They check the oracle against the ceiling, that the zero-signal interval contains 0.50, that the interval at 0.6 lies above 0.50, that accuracy rises with s, and that at each signal strength the model's mean does not exceed the oracle's mean by more than the model's interval half-width. They are checks on one run, not five independent confirmations.
 
-| Signal strength s | Model balanced accuracy (95% interval) | Oracle balanced accuracy | Analytic ceiling | Gate predicted |
+| Signal strength s | Model balanced accuracy (95% interval, normal multiplier 1.96) | Oracle balanced accuracy | Analytic ceiling | Gate predicted |
 | --- | --- | --- | --- | --- |
 | 0.0 | 0.481 (0.459 to 0.502) | 0.500 | 0.500 | 4 of 20 seeds |
 | 0.3 | 0.531 (0.506 to 0.555) | 0.621 | 0.641 | 4 of 20 seeds |
@@ -334,7 +334,7 @@ The first run failed as a design and stays on record in `docs/data/detection_cur
 
 - No real evaluation observation is published at row level, and the evaluation aggregates carry no ticker, week or date dimension. Synthetic control rows and run dates are published.
 - Up to v0.1.2 the ML layer had three leakage defects, fixed in v0.1.3 with a test each. The calibration block followed the training block with no purge gap. The logged Brier score was computed on rows the model was fitted on. The Brier check scored the calibrated ensemble on the rows its calibrator was fitted on. Calibration is now fitted on out-of-fold predictions, and a purged holdout block is used only for evaluation.
-- Control version 2 measures one uncalibrated classifier per seed, not the deployed ensemble; version 3 measures the ensemble with the gate's abstention not applied. In version 3 the model scores slightly above 0.50 on pure noise, within the pre-registered margin. In the exploratory analysis the pooled balanced accuracy is at most 0.009 above 0.50 at the upper end of its 95% interval; that bounds this statistic, not every form of dependence, and the cause is not identified.
+- Control version 2 measures one uncalibrated classifier per seed, not the deployed ensemble; version 3 measures the ensemble with the gate's abstention not applied. In version 3 the model scores slightly above 0.50 on pure noise, within the pre-registered margin. In the exploratory analysis the pooled balanced accuracy is 0.5021 with a 95% seed-bootstrap interval of 0.4955 to 0.5085; that interval concerns this statistic only and does not rule out other forms of dependence, and the cause is not identified.
 - Samples are small, with 629 resolved calls and 120 resolved ML predictions, counted one per ticker-day.
 - Only the LightGBM member of the ensemble is Platt-calibrated, the logged out-of-fold Brier score belongs to the model chosen on the same folds, and the version 3 seed count was planned from version 2 variability, which the strongest signal slightly exceeded.
 - The control's oracle thresholds the true conditional mean at the cost and is not the rule that maximises balanced accuracy; the analytic ceiling is for the zero-cost sign problem.

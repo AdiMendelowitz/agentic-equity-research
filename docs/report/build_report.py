@@ -42,9 +42,14 @@ FIGURES: tuple[tuple[str, str], ...] = (
         "detection_curve.svg",
         "Control version 2, model and oracle balanced accuracy against signal strength, with ceiling and 0.50 line",
     ),
+    (
+        "detection_curve_v3.svg",
+        "Control version 3, pre-registered, 46 seeds per signal strength, per-seed and mean balanced accuracy with "
+        "t intervals against signal strength, with the oracle line, the pre-registered margin band and the 0.50 line",
+    ),
     ("calibration.svg", "Hit rate by conviction bin with 95% Wilson intervals, against the 0.50 line"),
     ("recommendation_hit_rate.svg", "Hit rate by recommendation with 95% Wilson intervals"),
-    ("ml_gate.svg", "Share of rows on which the ML gate abstained, and its accuracy where it predicted"),
+    ("ml_gate.svg", "Share of rows on which the ML gate abstained, and its accuracy on the predictions that resolved"),
 )
 
 CSS = """
@@ -241,10 +246,10 @@ def correction_note() -> str:
     return (
         "<p><strong>Correction, 17 November 2026.</strong> The aggregates first published on 9 November counted "
         "same-day reruns of the pipeline as separate calls. Of the 2,609 rows first published, 288 were second or "
-        "later runs of a ticker-day already in the store, scored against the same five-day outcome as the first run, "
-        "so they were not independent observations. "
-        "Every evaluation figure on this page now counts one decision per ticker-day and keeps the first run of each "
-        "day. "
+        "later runs of a ticker-day already in the store. The 78 of them that were resolved calls had been "
+        "scored against the same five-day outcome as the first run, so they were not independent observations. "
+        "Every figure on recorded output on this page now counts one decision per ticker-day and keeps the first "
+        "run of each day. "
         "Under each counting rule in the table below, recorded accuracy stays close to 0.50.</p>"
         '<table id="correction"><caption>Scored cohort under each counting rule</caption><thead><tr>'
         '<th scope="col">Rule</th><th scope="col">Recorded calls correct</th>'
@@ -410,13 +415,13 @@ def _primary_row(signal: float, result: dict[str, Any]) -> str:
         bound = "n/a" if eq["lower"] is None else f"{pct} interval {_range(eq['lower'], eq['upper'])}"
         extra = f"{eq['margin_low']:.3f} to {eq['margin_high']:.3f}"
         n, mean = eq["n"], eq["mean"]
-        verdict = _verdict_label(eq["verdict"], "within the margin of chance")
+        verdict = _verdict_label(eq["verdict"], "equivalent to 0.50 within 0.03")
     else:
         row = result["superiority"][signal]
         bound = "n/a" if row["lower_bound"] is None else f"lower bound {row['lower_bound']:.3f}"
         extra = "n/a" if row["p_holm"] is None else f"{row['p_holm']:.2g}"
         n, mean = row["n"], row["mean"]
-        verdict = _verdict_label(row["verdict"], "above chance")
+        verdict = _verdict_label(row["verdict"], "above 0.50")
     return (
         f'<tr><td class="n">{signal:.2f}</td><td class="n">{n}</td><td class="n">{_fmt(mean)}</td>'
         f'<td class="n">{bound}</td><td class="n">{extra}</td><td>{verdict}</td></tr>'
@@ -460,8 +465,9 @@ def control_v3_section() -> str:
     at_chance = sum(1 for c in cells if c.model_balanced_accuracy == CHANCE)
     return (
         '<section id="control-v3"><h2>Control experiment, version 3 (pre-registered)</h2>'
-        "<p>This control scores the calibrated ensemble on seeds disjoint from version 2, on every seed whether "
-        "or not the gate passed, so the endpoints describe the estimator and not the system with abstention. "
+        "<p>This control scores the two-model ensemble, whose LightGBM member is Platt-calibrated, on seeds "
+        "disjoint from version 2, on every seed whether or not the gate passed, so the endpoints describe the "
+        "estimator and not the system with abstention. "
         "The specification "
         "(<code>docs/prereg/control-v3.md</code>) was released in a public commit holding the whole code tree, "
         "and the sha256 of the specification and its two analysis files was posted in public issue 1, before "
@@ -475,7 +481,7 @@ def control_v3_section() -> str:
         "recomputed on this page. A verdict of within the margin is not evidence that the mean equals 0.50, "
         "and it is not a leakage test.</p>"
         f"<p>{at_chance} of {len(cells)} cells score exactly 0.500, which is what a prediction of a single "
-        "class scores. Such cells pull each mean towards 0.50 and narrow the zero-signal interval, so the "
+        "class scores. Such cells pull each mean towards 0.50, so the "
         "results describe the thresholded ensemble estimator with the gate not applied; the pipeline's brief "
         "carries the gated single-model prediction. The oracle thresholds the true conditional "
         "mean at the cost; it is not the rule that maximises balanced accuracy, and the analytic ceiling is "
@@ -511,8 +517,8 @@ def exploratory_section() -> str:
         own_verdict = (
             "The pooled interval contains 0.50. That is consistent with the per-seed excess being a "
             "finite-window property of the per-seed statistic, and it does not identify the cause. The upper "
-            f"end of the pooled interval is {m['pooled_own_high'] - CHANCE:.3f} above 0.50; this bounds the "
-            "pooled balanced accuracy, not every form of dependence."
+            f"end of the pooled interval is {m['pooled_own_high'] - CHANCE:.3f} above 0.50; this interval concerns "
+            "the pooled balanced accuracy only and does not rule out other forms of dependence."
         )
     else:
         own_verdict = (
@@ -538,7 +544,8 @@ def exploratory_section() -> str:
         f"{m['pooled_unrelated_high']:.4f}).</p>"
         f"<p>{own_verdict}{unrelated_verdict}</p>"
         f"<p>The share of up predictions after an up label minus the share after a down label was "
-        f"{m['follow_index']:+.4f}; a negative value means predictions ran against the last completed label. "
+        f"{m['follow_index']:+.4f}; a negative value means up predictions were less frequent after an up label "
+        "than after a down label. "
         f"{round(m['single_class_cells'])} of {seeds} cells predicted a single class.</p>"
         f'<p class="source">Source: <code>docs/data/{EXPLORATORY_FILE}</code> and '
         "<code>docs/report/explore_zero_signal_v3.py</code></p></section>"
@@ -673,8 +680,9 @@ def baselines_section() -> str:
         f'<th scope="col">{confidence} interval</th><th scope="col">Contains 0.50</th></tr></thead>'
         f"<tbody>{effect_rows}</tbody></table>"
         "<p>Calls on the same ticker overlap in their five-day windows and calls on the same day share the "
-        "market move, so the independent count is lower than the nominal count. A design effect of d divides "
-        "the effective count by d. The published data carry no ticker or date, so the effect cannot be "
+        "market move, so the independent count is lower than the nominal count. Dividing the nominal count by "
+        "a design effect d gives the effective count. The published data carry no ticker or date, so the "
+        "effect cannot be "
         "estimated here; the rows are assumed scenarios, not a measured range. The 0.50 line is also not "
         "the no-skill rate for these calls, which the baselines above describe.</p>"
         '<p class="source">Source: <code>docs/data/eval_recommendation.csv</code></p></section>'
