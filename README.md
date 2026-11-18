@@ -38,7 +38,8 @@
 | ML | LightGBM and logistic regression, purged time-series cross-validation, out-of-fold Platt calibration, a holdout block no fit sees, and a gate that abstains | `src/aer/ml/` |
 | Leakage | Future-bar mutation, label alignment, purge-gap geometry and holdout isolation tested | `tests/ml/test_leakage.py`, `tests/test_models_fixes.py` |
 | Pre-registration | Specification and analysis code hashed in a public issue before the first results commit | `docs/prereg/control-v3.md`, [issue 1](https://github.com/AdiMendelowitz/agentic-equity-research/issues/1) |
-| Reproducibility | Report and figures rebuilt from `docs/data` on every push, input hashes in the page footer, byte-identical figure builds tested | `docs/report/`, `.github/workflows/pages.yml` |
+| Reproducibility | Report and figures rebuilt from `docs/data` on every push, input hashes in the page footer, byte-identical figure builds tested, and one command that re-runs the control and compares every published artefact | `docs/report/reproduce.py`, `.github/workflows/pages.yml` |
+| Documentation | A data card and a model card, including the configuration that actually ran | [`docs/cards/`](docs/cards/model-card.md) |
 | Release safety | Hermetic imports with sockets refused, redaction scan, gitleaks, licence audit and a mypy ceiling | `tests/test_hermetic.py`, `tools/` |
 | Backtesting | A vectorised daily engine with next-day execution, explicit round-trip costs and empyrical metrics, written without `backtrader` | `src/aer/backtesting/`, `tests/backtesting/` |
 | Decisions | Five architecture decision records, each naming the tests that enforce it | [`docs/adr/`](docs/adr/README.md) |
@@ -90,6 +91,7 @@ The package needs Python 3.12 to 3.14 (3.14 is the default) and [uv](https://doc
 ```bash
 uv sync
 uv run aer-demo   # five synthetic tickers, offline, no model call
+uv run python docs/report/reproduce.py --skip-control   # rebuild figures and report, compare with the committed ones
 ```
 
 <details>
