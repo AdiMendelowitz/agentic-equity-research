@@ -265,7 +265,7 @@ def _run_ml_prediction(state: BriefState) -> dict:
     running is not stopped, keeps running to completion and may still write its model file; its result is
     discarded.
     Checks the MLPrediction cache before retraining (TTL_ANALYSIS = 43200s).
-    The stored prediction is the member the gate validated (selected_prediction). agrees_with_llm and
+    The stored prediction is the member the gate checked (selected_prediction). agrees_with_llm and
     ml_tension describe that member (direction, prob_up_raw). They are set before the ensemble fields are
     attached and are not recomputed from the ensemble direction.
     """

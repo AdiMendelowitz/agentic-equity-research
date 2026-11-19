@@ -6,14 +6,14 @@ Cross-process: PRAGMA busy_timeout=5000 on each connection.
 Note on synth_correct (M9 design review):
 synth_correct compares a weeks-to-months LLM thesis against 5-day price movement.
 This metric is logged for observability. It is NOT used in should_trigger_review()
-to make model replacement decisions - the comparison is structurally biased against
-the LLM due to horizon mismatch.
+to make model replacement decisions - the five-day proxy does not
+match the horizon of the LLM thesis, and which side the mismatch favours is not known.
 
 What the stored columns mean:
 - actual_direction is UP when the five-day return on adjusted closes is above zero and DOWN otherwise. There is
   no cost band, so a wrong BUY fixes the outcome as DOWN and a wrong SELL or AVOID fixes it as UP.
 - ml_direction is the direction of the member the brief carried (the LightGBM member for rows written before
-  17 Nov 2026, which include every published aggregate, and the member the gate validated from then on, see
+  17 Nov 2026, which include every published aggregate, and the member the gate checked from then on, see
   aer.ml.models.selected_prediction). The ensemble direction is not stored, and ml_correct scores that member.
 - The ML label in aer.ml.features is a return above a 10 basis point cost on unadjusted closes, so ml_correct
   and the training target are not the same quantity.

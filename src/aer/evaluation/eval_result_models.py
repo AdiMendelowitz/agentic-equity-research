@@ -69,12 +69,12 @@ class LayoffsEvalResult(BaseModel):
     passed_gate: bool | None = None  # None when gate_result != EVALUATED
 
     # Non-gating diagnostic metrics (reported; never alter gate_result/passed_gate/N)
-    recall: float | None = None  # BEARISH calls / total_evaluable underperformers
+    recall: float | None = None  # evaluable underperformers with a BEARISH call / all evaluable underperformers
     average_precision: float | None = None  # average_precision_score (pseudo-scores: BEARISH=1/CAUTIOUS=0.5/NEUTRAL=0)
     # mean(ETF_fwd_return - SPY_fwd_return) over all evaluable resolved records (BEARISH+CAUTIOUS+NEUTRAL)
     diagnostic_mean_excess: float | None = None
     diagnostic_deadband_precision: float | None = None  # precision with vol-scaled deadband
-    # Diagnostic A: Wilson 95% score interval on gate_precision
+    # Diagnostic A: Wilson 95% score interval on gate_precision, assuming independent records
     gate_precision_ci_low: float | None = None
     gate_precision_ci_high: float | None = None
     # Diagnostic B: base-rate null and lift

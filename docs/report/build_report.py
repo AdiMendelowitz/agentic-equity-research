@@ -1,7 +1,8 @@
 """Build the static evaluation report (one HTML page plus figures) from the committed data.
 
-Every number on the page is computed here from a file under docs/data, and the footer records the
-hash of each input so a reader can check which data produced the page.
+Every count, rate and interval on the page is computed here from a file under docs/data, except the historical
+correction table (CORRECTION_ROWS), whose counts are literals. The design effects are assumed values set in this
+module, and the footer records the hash of every file in docs/data.
 """
 
 from __future__ import annotations
@@ -49,7 +50,11 @@ FIGURES: tuple[tuple[str, str], ...] = (
     ),
     ("calibration.svg", "Hit rate by conviction bin with 95% Wilson intervals, against the 0.50 line"),
     ("recommendation_hit_rate.svg", "Hit rate by recommendation with 95% Wilson intervals"),
-    ("ml_gate.svg", "Share of rows on which the ML gate abstained, and its accuracy on the predictions that resolved"),
+    (
+        "ml_gate.svg",
+        "Share of rows on which the ML gate abstained, and the accuracy of the recorded LightGBM direction "
+        "on the predictions that resolved",
+    ),
 )
 
 CSS = """
@@ -146,7 +151,7 @@ def cohort() -> list[CohortStep]:
     resolved = sum(int(r["n_resolved"]) for r in rows if r["recommendation"] != "HOLD")
     correct = sum(int(r["n_synth_correct"]) for r in rows if r["recommendation"] != "HOLD")
     return [
-        CohortStep("Ticker-days in the evaluation store", briefs),
+        CohortStep("Ticker-days in the published evaluation data", briefs),
         CohortStep("HOLD, no scored outcome", hold),
         CohortStep("Actionable calls (BUY, SELL or AVOID)", briefs - hold),
         CohortStep("Actionable calls not resolved", briefs - hold - resolved),
@@ -304,7 +309,7 @@ def _gate_note(summaries: Sequence[SignalSummary]) -> str:
         f"{first.signal} and {comparison.discordant[1]} only at {last.signal} (exact McNemar test, two-sided "
         f"p = {comparison.paired_p_value:.3f}, added after the results were seen; Fisher's exact test, which "
         f"treats the seeds as independent and was reported first, gives p = {comparison.p_value:.3f}). "
-        "The gate is reported as a failed component.</p>"
+        "The paired comparison found no clear change in how often the gate passed.</p>"
     )
 
 
@@ -481,7 +486,7 @@ def control_v3_section() -> str:
         "recomputed on this page. A verdict of within the margin is not evidence that the mean equals 0.50, "
         "and it is not a leakage test.</p>"
         f"<p>{at_chance} of {len(cells)} cells score exactly 0.500, which is what a prediction of a single "
-        "class scores. Such cells pull each mean towards 0.50, so the "
+        "class scores. Such cells can pull a mean towards 0.50, so the "
         "results describe the thresholded ensemble estimator with the gate not applied; the pipeline's brief "
         "carries the gated single-model prediction. The oracle thresholds the true conditional "
         "mean at the cost; it is not the rule that maximises balanced accuracy, and the analytic ceiling is "
@@ -677,7 +682,8 @@ def baselines_section() -> str:
         '<table id="design-effect"><caption>Sensitivity of the accuracy interval to dependence between '
         "calls</caption>"
         '<thead><tr><th scope="col">Design effect</th><th scope="col">Effective calls</th>'
-        f'<th scope="col">{confidence} interval</th><th scope="col">Contains 0.50</th></tr></thead>'
+        f'<th scope="col">{confidence} Wilson interval at the assumed design effect</th>'
+        '<th scope="col">Contains 0.50</th></tr></thead>'
         f"<tbody>{effect_rows}</tbody></table>"
         "<p>Calls on the same ticker overlap in their five-day windows and calls on the same day share the "
         "market move, so the independent count is lower than the nominal count. Dividing the nominal count by "
@@ -759,7 +765,8 @@ def render() -> str:
         "<title>Agentic equity research: evaluation report</title>"
         f"<style>{CSS}</style></head><body><main>"
         "<h1>Agentic equity research: evaluation report</h1>"
-        "<p>Whole-sample aggregates only; no ticker, week or date dimension is published. "
+        "<p>Recorded calls are published as whole-sample aggregates only, with no ticker, week or date "
+        "dimension; the synthetic control is also shown per seed. "
         "No figure here is a trading result.</p>"
         f"{cohort_section()}{baselines_section()}{detection_section(summaries)}{control_v3_section()}"
         f"{exploratory_section()}{seeds_section(summaries)}{figures_section()}{limits_section()}</main>"

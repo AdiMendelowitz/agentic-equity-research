@@ -12,7 +12,7 @@ PREDICTION_HORIZON_DAYS: int = 5
 PURGE_GAP_BARS: int = 10  # 2× horizon - keeps training-label windows from crossing a validation boundary
 N_CV_SPLITS: int = 5
 CV_TEST_SIZE_BARS: int = 55
-# Minimum feature rows for valid CV: ceil(N_CV_SPLITS*(CV_TEST_SIZE_BARS+PURGE_GAP_BARS) / 0.85)
+# Policy floor on feature rows for CV: ceil(N_CV_SPLITS*(CV_TEST_SIZE_BARS+PURGE_GAP_BARS) / 0.85)
 # = ceil(5*(55+10)/0.85) = ceil(382) = 383 - rounded to 400 for safety margin
 MIN_TRAINING_BARS: int = 400
 

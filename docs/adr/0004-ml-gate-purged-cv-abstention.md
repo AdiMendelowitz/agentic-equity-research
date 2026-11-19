@@ -20,8 +20,8 @@ Labels look five bars ahead, so neighbouring rows share information. A random sp
 
 ## Consequences
 
-- Positive. Each leakage path has a test, and an abstention is a recorded outcome.
-- Negative. In the control the gate passed in 4 of 46 seeds at zero signal and 11 of 46 at the strongest signal, so it separates signal from noise weakly. Only the LightGBM member is Platt-calibrated. A conformal gate is the planned replacement.
+- Positive. Each leakage check listed under Enforced by has a test, and an abstention is a recorded outcome.
+- Negative. In the control the gate passed in 4 of 46 seeds at zero signal and 11 of 46 at the strongest signal, a descriptive count. Only the LightGBM member is Platt-calibrated. A conformal gate is the planned replacement.
 
 ## Enforced by
 

@@ -2,7 +2,7 @@
 
 Note on synth_correct horizon mismatch:
 The LLM recommendation is a weeks-to-months thesis; synth_correct evaluates it against
-5-day price movement. This comparison is structurally biased against the LLM - it is
+5-day price movement. This five-day proxy does not match the thesis horizon - it is
 logged for observability only. Do NOT use it to trigger model replacement decisions
 (should_trigger_review intentionally excludes this comparison from replacement logic).
 """

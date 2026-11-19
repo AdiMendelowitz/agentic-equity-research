@@ -10,7 +10,7 @@ The pipeline makes many model calls per run. Free providers carry rate limits an
 
 ## Decision
 
-`src/aer/utils/llm_client.py` routes each call through a fixed cascade. It tries a primary free provider, then a secondary free provider, then a local Ollama model when the daemon is running, and reaches the paid Anthropic model only when these fail. A call with an unknown tier raises `ValueError`. A context-window guard estimates the prompt size from its character count and, above `FREE_MODEL_CONTEXT_LIMIT` (32,000 tokens by default), skips the free providers and records `context_too_large` in the failure chain. `src/aer/utils/usage_meter.py` records the usage each provider reports. A call whose response carries no usage is counted in `calls_without_usage` and never estimated. Of 7,033 logged calls over 33 runs, 1,238 (18%) reached the paid fallback.
+`src/aer/utils/llm_client.py` routes each call through a fixed cascade. It tries a primary free provider, then a secondary free provider, then a local Ollama model when the daemon is running, and reaches the paid Anthropic model only when these fail. A call with an unknown tier raises `ValueError`. A context-window guard estimates the prompt size from its character count and, above `FREE_MODEL_CONTEXT_LIMIT` (32,000 tokens by default), skips the free providers and records `context_too_large` in the failure chain. `src/aer/utils/usage_meter.py` records the usage each provider reports. A call whose response carries no usage is counted in `calls_without_usage` and never estimated. Of 7,033 logged calls over 33 runs, 1,238 (18%) were served by the paid fallback.
 
 ## Alternatives considered
 

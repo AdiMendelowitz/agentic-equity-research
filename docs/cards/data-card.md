@@ -18,7 +18,7 @@ This card describes the files in `docs/data`, in the spirit of Datasheets for Da
 | `detection_curve_v3.csv` | 138 | Pre-registered control version 3, 46 seeds at each of three signal strengths |
 | `exploratory_zero_signal_v3.csv` | 14 | Summary of an exploratory diagnostic at zero signal, as metric and value pairs |
 
-The control files carry one row per seed and signal strength. Version 3 records the signal, seed, whether the gate passed, the model used, the cross-validation F1 mean and standard deviation, balanced accuracy of the model and of the oracle, the holdout Brier score of the ensemble, the majority-class accuracy, the label base rate and the number of out-of-sample rows.
+The control files carry one row per seed and signal strength. Version 3 records the signal, seed, whether the gate passed, the model used, the cross-validation F1 mean and standard deviation, balanced accuracy of the two-model ensemble, scored on every seed whether or not the gate passed, and of the oracle, the holdout Brier score of the ensemble, the majority-class accuracy, the label base rate and the number of out-of-sample rows.
 
 ## Unit of analysis
 
@@ -68,4 +68,4 @@ uv run python docs/report/build_report.py --out site
 uv run python docs/report/reproduce.py
 ```
 
-`build_figures.py` regenerates the figures from `docs/data`, and `build_report.py` computes every number on the report page from a file there, except the counts in the correction note and its table, which are literals in `build_report.py`, and records an input hash in the footer. `reproduce.py` re-runs the pre-registered control and the figure script and compares their output with the committed files, the figures after normalising the sign of zero and hashed element ids, then prints `RESULT: REPRODUCED` or `RESULT: DIFFERS`.
+`build_figures.py` regenerates the figures from `docs/data`, and `build_report.py` computes every number on the report page from a file there, except the counts in the correction note and its table and the assumed design effects, which are literals in `build_report.py`, and records an input hash in the footer. `reproduce.py` re-runs the pre-registered control and the figure script and compares their output with the committed files, the figures after normalising the sign of zero and hashed element ids, then prints `RESULT: REPRODUCED` or `RESULT: DIFFERS`.

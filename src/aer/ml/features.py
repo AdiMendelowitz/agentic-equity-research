@@ -94,7 +94,7 @@ def build_feature_matrix(ticker: str, period: str = "3y", prices: pd.DataFrame |
     available_features = [c for c in FEATURE_COLS if c in df.columns]
 
     # Build label: cost-adjusted binary direction label for each bar
-    # this label is NOT src/data/opinions.py's forward_return_5d. Here: a binary, thresholded
+    # this label is NOT src/aer/data/opinions.py's forward_return_5d. Here: a binary, thresholded
     # at ROUND_TRIP_COST_BPS, on the dividend-UNADJUSTED path, with an explicit split guard. There:
     # an uncosted continuous total return on the dividend-ADJUSTED path(B)). Same nominal
     # horizon, two definitions, both intentional; do not reconcile one into the other.

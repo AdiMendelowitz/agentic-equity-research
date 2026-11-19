@@ -341,7 +341,7 @@ def fit_ensemble(feature_df: pd.DataFrame) -> FittedEnsemble | None:
 
 
 def selected_prediction(lgbm_ml: "MLPrediction", logistic_ml: "MLPrediction") -> "MLPrediction":
-    """Return the member the gate validated, by the rule fit_ensemble applies: higher mean CV F1, tie to logistic.
+    """Return the member the gate checked, by the rule fit_ensemble applies: higher mean CV F1, tie to logistic.
 
     Each prediction carries its own model's mean CV F1, so the choice here is the one the gate was computed on.
     """

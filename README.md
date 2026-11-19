@@ -26,8 +26,8 @@
 ## Results at a glance
 
 - **The harness detects a signal that exists, under a known generator.** In the pre-registered control the two-model ensemble (only its LightGBM member is Platt-calibrated), scored on every seed whether or not the gate passed, reaches balanced accuracy 0.530 and 0.565 at the two non-zero signal strengths, both above 0.50 after a Holm adjustment, and stays within 0.03 of chance at zero signal. The zero-signal mean is itself 0.516, and the lower bound at 0.3 (0.519) lies inside the zero-signal interval. No test between signal strengths was pre-registered, so the control supports comparisons with 0.50 only.
-- **No measurable edge on recorded output.** 314 of 629 resolved calls were correct (0.499, 95% Wilson interval 0.460 to 0.538), counting one decision per ticker and day, and detecting 0.55 against 0.50 would need about 780 independent calls under a two-sided test at the 5% level with 80% power. A rule that always says down scores 350 of 629 (0.556) on the same calls. These figures were corrected on 17 November 2026, and the correction note is under "What the evaluation found".
-- **The ML gate barely separates signal from noise.** In the control it passed in 4 of 46 seeds with no signal and 11 of 46 at the strongest, a descriptive count and not a tested endpoint. A conformal gate is the next candidate, to be tested against matched-coverage selection.
+- **No measurable edge on recorded output.** 314 of 629 resolved calls were correct (0.499, 95% Wilson interval 0.460 to 0.538, assuming independent calls), counting one decision per ticker and day, and detecting 0.55 against 0.50 would need about 780 independent calls under a two-sided test at the 5% level with 80% power. A rule that always says down scores 350 of 629 (0.556) on the same calls. These figures were corrected on 17 November 2026, and the correction note is under "What the evaluation found".
+- **The ML gate rarely passes.** In the control it passed in 4 of 46 seeds with no signal and 11 of 46 at the strongest, a descriptive count and not a tested endpoint. A conformal gate is the next candidate, to be tested against matched-coverage selection.
 - **The multi-agent design is not yet justified by evidence.** Nothing here compares the five agents with one well-prompted model on the same data; that comparison is on the roadmap.
 
 ## Engineering at a glance
@@ -38,7 +38,7 @@
 | ML | LightGBM and logistic regression, purged time-series cross-validation, out-of-fold Platt calibration, a holdout block no fit sees, and a gate that abstains | `src/aer/ml/` |
 | Leakage | Future-bar mutation, label alignment, purge-gap geometry and holdout isolation tested | `tests/ml/test_leakage.py`, `tests/test_models_fixes.py` |
 | Pre-registration | Specification and analysis code hashed in a public issue before the first results commit | `docs/prereg/control-v3.md`, [issue 1](https://github.com/AdiMendelowitz/agentic-equity-research/issues/1) |
-| Reproducibility | Report and figures rebuilt from `docs/data` on every push, input hashes in the page footer, byte-identical figure builds tested, and one command that re-runs the control and compares every published artefact | `docs/report/reproduce.py`, `.github/workflows/pages.yml` |
+| Reproducibility | Report and figures rebuilt from `docs/data` on every push, input hashes in the page footer, byte-identical figure builds tested, and one command that re-runs the control and the figures, compares the control CSV and the figure SVGs byte for byte with the committed files, and checks that the report page builds and is not empty | `docs/report/reproduce.py`, `.github/workflows/pages.yml` |
 | Documentation | A data card and a model card, including the configuration that actually ran | [`docs/cards/`](docs/cards/model-card.md) |
 | Release safety | Hermetic imports with sockets refused, redaction scan, gitleaks, licence audit and a mypy ceiling | `tests/test_hermetic.py`, `tools/` |
 | Backtesting | A vectorised daily engine with next-day execution, explicit round-trip costs and empyrical metrics, written without `backtrader` | `src/aer/backtesting/`, `tests/backtesting/` |
@@ -91,7 +91,7 @@ The package needs Python 3.12 to 3.14 (3.14 is the default) and [uv](https://doc
 ```bash
 uv sync
 uv run aer-demo   # five synthetic tickers, offline, no model call
-uv run python docs/report/reproduce.py --skip-control   # rebuild figures and report, compare with the committed ones
+uv run python docs/report/reproduce.py --skip-control   # rebuild the figures, compare them with the committed ones, check the report builds
 ```
 
 <details>
@@ -175,7 +175,7 @@ Blue boxes are deterministic code, lavender the agents, rose the synthesis model
 
 ### Cost-governed model routing
 
-Each model call tries the free providers first and reaches the paid model only when they fail or the prompt exceeds their context limit. Of 7,033 model calls logged over 33 runs, 1,238 (18%) reached the paid fallback.
+Each model call tries the free providers first and reaches the paid model only when they fail or the prompt exceeds their context limit. Of 7,033 model calls logged over 33 runs, 1,238 (18%) were served by the paid fallback.
 
 ```mermaid
 flowchart TD
@@ -268,8 +268,8 @@ The current control, version 3, is pre-registered. It scores the two-model ensem
 | Signal strength s | Ensemble balanced accuracy, every seed | Pre-registered test | Verdict | Gate passed |
 | --- | --- | --- | --- | --- |
 | 0.0 | 0.516 | 90% interval 0.510 to 0.522 inside 0.47 to 0.53 | equivalent to 0.50 within 0.03: met | 4 of 46 seeds |
-| 0.3 | 0.530 | lower bound 0.519, Holm-adjusted p below 0.001 | above 0.50: met | 5 of 46 seeds |
-| 0.6 | 0.565 | lower bound 0.547, Holm-adjusted p below 0.001 | above 0.50: met | 11 of 46 seeds |
+| 0.3 | 0.530 | one-sided 95% lower bound 0.519 (not adjusted for multiple comparisons), Holm-adjusted p below 0.001 | above 0.50: met | 5 of 46 seeds |
+| 0.6 | 0.565 | one-sided 95% lower bound 0.547 (not adjusted for multiple comparisons), Holm-adjusted p below 0.001 | above 0.50: met | 11 of 46 seeds |
 
 A rule that thresholds the true conditional mean stays 0.104 and 0.145 ahead at s = 0.3 and 0.6. At zero signal the model is inside the margin but slightly above 0.50; the report page carries an exploratory analysis of that excess, whose cause is not identified. The command is `uv run python docs/report/run_control_v3.py`.
 
@@ -312,7 +312,7 @@ Five expectations, defined in `src/aer/demo/control.py`, were written down befor
 
 <p align="center"><img src="docs/img/detection_curve.svg" alt="Control version 2, model and oracle balanced accuracy against signal strength, with ceiling and 0.50 line" width="680"></p>
 
-The negative control was met narrowly. At zero signal the upper bound of the interval is only 0.002 above 0.50, and the mean sits below 0.50; this shows no false detection here, not that the model is equivalent to chance. At s = 0.6 the model's margin over chance is 0.074, against 0.202 for the oracle. The gate fired in 20%, 20% and 30% of seeds as the signal grew, so its F1 threshold showed no useful discrimination here.
+The negative control was met narrowly. At zero signal the upper bound of the interval is only 0.002 above 0.50, and the mean sits below 0.50; the interval includes 0.50, which does not make the model equivalent to chance. At s = 0.6 the model's margin over chance is 0.074, against 0.202 for the oracle. The gate fired in 20%, 20% and 30% of seeds as the signal grew, and the paired comparison on the report page found no clear change in how often it passed.
 
 The first run failed as a design and stays on record in `docs/data/detection_curve_run1.csv`. Its injected signal fed back on itself, which turned the strongest setting into a runaway trend, and raw accuracy tracked the label base rate. Version 2 removed the feedback and switched to balanced accuracy. The command is `uv run python docs/report/run_control.py`.
 
@@ -332,6 +332,7 @@ The first run failed as a design and stays on record in `docs/data/detection_cur
 
 ## Limits
 
+- Open defects found by outside review are tracked as public issues labelled known-limitation, with an overview in [issue 26](https://github.com/AdiMendelowitz/agentic-equity-research/issues/26).
 - No real evaluation observation is published at row level, and the evaluation aggregates carry no ticker, week or date dimension. Synthetic control rows and run dates are published.
 - Up to v0.1.2 the ML layer had three leakage defects, fixed in v0.1.3 with a test each. The calibration block followed the training block with no purge gap. The logged Brier score was computed on rows the model was fitted on. The Brier check scored the calibrated ensemble on the rows its calibrator was fitted on. Calibration is now fitted on out-of-fold predictions, and a purged holdout block is used only for evaluation.
 - Control version 2 measures one uncalibrated classifier per seed, not the deployed ensemble; version 3 measures the ensemble with the gate's abstention not applied. In version 3 the model scores slightly above 0.50 on pure noise, within the pre-registered margin. In the exploratory analysis the pooled balanced accuracy is 0.5021 with a 95% seed-bootstrap interval of 0.4955 to 0.5085; that interval concerns this statistic only and does not rule out other forms of dependence, and the cause is not identified.
