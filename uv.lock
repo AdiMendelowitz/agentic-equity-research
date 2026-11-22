@@ -21,7 +21,7 @@ overrides = [{ name = "numba", specifier = ">=0.63" }]
 
 [[package]]
 name = "agentic-equity-research"
-version = "0.1.0"
+version = "0.1.5"
 source = { editable = "." }
 dependencies = [
     { name = "anthropic" },

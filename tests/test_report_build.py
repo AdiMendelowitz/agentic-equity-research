@@ -558,3 +558,11 @@ def test_new_sections_keep_heading_levels_and_order(site: Path, page: _Page) -> 
     assert positions == sorted(positions)
     assert page.headings[0] == 1
     assert all(b - a <= 1 for a, b in zip(page.headings, page.headings[1:]))
+
+
+def test_correction_paragraph_quotes_the_corrected_row(site: Path) -> None:
+    """The literal cv_f1_mean in the 22 November 2026 correction paragraph equals the corrected data row."""
+    with (DATA_DIR / "detection_curve_v3.csv").open(encoding="utf-8", newline="") as handle:
+        row = next(r for r in csv.DictReader(handle) if float(r["signal"]) == 0.6 and r["seed"] == "1008")
+    text = (site / "index.html").read_text(encoding="utf-8")
+    assert f"from 0.665139 to {row['cv_f1_mean']}" in text

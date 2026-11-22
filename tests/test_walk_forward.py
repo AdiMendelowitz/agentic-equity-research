@@ -1,16 +1,21 @@
 """Walk-forward module: constants, the fold layout as computed by the code, and result serialisation.
 
 Behaviour of run_walk_forward itself (cutoff, insufficient history, signal failures, no lookahead) is tested
-hermetically in tests/test_integration_walkforward.py.
+hermetically in tests/test_integration_walkforward.py; the empty signal list of issue #34 is tested here.
 """
 
 from datetime import date
+from types import SimpleNamespace
+from typing import Any
 
+import numpy as np
+import pandas as pd
 import pytest
 from pydantic import ValidationError
 
+import aer.risk.walkforward as wf
 from aer.risk.models import FoldResult, WalkForwardResult
-from aer.risk.walkforward import _compute_fold_boundaries
+from aer.risk.walkforward import _compute_fold_boundaries, run_walk_forward
 from aer.utils.wfo_constants import TOTAL_MIN_BARS, WFO_MIN_IS_BARS, WFO_N_FOLDS, WFO_OOS_SIZE_BARS, WFO_PURGE_GAP_BARS
 
 
@@ -67,6 +72,48 @@ def _fold(fold_idx: int = 0, fold_error: str | None = None) -> FoldResult:
         factor_alpha_significant=ok,
         fold_error=fold_error,
     )
+
+
+def _synthetic_prices(n_bars: int) -> pd.DataFrame:
+    index = pd.bdate_range("2020-01-02", periods=n_bars)
+    close = 100.0 * np.exp(np.cumsum(np.random.default_rng(7).normal(0.0, 0.01, n_bars)))
+    return pd.DataFrame(
+        {"Open": close, "High": close * 1.01, "Low": close * 0.99, "Close": close, "Volume": 1_000_000.0},
+        index=index,
+    )
+
+
+class TestEmptySignalFailsFold:
+    """An empty return from generate fails the fold, as a raising generate does (no HOLD substitution)."""
+
+    @staticmethod
+    def _run(monkeypatch: pytest.MonkeyPatch, generate: Any) -> Any:
+        monkeypatch.setattr(wf, "get_price_history_raw", lambda ticker: _synthetic_prices(TOTAL_MIN_BARS))
+        monkeypatch.setattr(wf, "get_factor_loadings", lambda ticker, as_of_date: None)
+        monkeypatch.setattr("aer.simulation.signal_generator.generate", generate)
+        return run_walk_forward("SYN", date(2030, 1, 1))
+
+    def test_empty_signal_list_fails_every_fold(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        wfr = self._run(monkeypatch, lambda history, signal_date, tickers: [])
+        assert wfr.insufficient_history is False
+        assert wfr.n_folds_completed == 0
+        assert len(wfr.folds) == WFO_N_FOLDS
+        assert all(
+            f.fold_error is not None and "signal generation returned no signal at" in f.fold_error for f in wfr.folds
+        )
+        assert all(f.oos_sharpe_long is None and f.oos_sharpe_ls is None for f in wfr.folds)
+        assert wfr.mean_oos_sharpe_long is None
+
+    def test_empty_signal_fails_the_fold_like_a_raising_generate(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        def raising(history: pd.DataFrame, signal_date: pd.Timestamp, tickers: list[str]) -> list[SimpleNamespace]:
+            raise ValueError("synthetic signal failure")
+
+        raised = self._run(monkeypatch, raising)
+        empty = self._run(monkeypatch, lambda history, signal_date, tickers: [])
+        assert [f.fold_idx for f in empty.folds] == [f.fold_idx for f in raised.folds]
+        assert empty.n_folds_completed == raised.n_folds_completed == 0
+        assert all(f.fold_error is not None and f.fold_error.startswith("signal generation") for f in empty.folds)
+        assert all(f.fold_error is not None and f.fold_error.startswith("signal generation") for f in raised.folds)
 
 
 class TestResultSerialization:

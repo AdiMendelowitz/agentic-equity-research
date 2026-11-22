@@ -240,3 +240,16 @@ def test_excluded_modules_absent():
     pattern = re.compile(r"^\s*(from|import)\s+(instaloader|playwright|predictit|discord|backtrader)\b", re.M)
     offenders = [str(p.relative_to(PKG)) for p in PKG.rglob("*.py") if pattern.search(p.read_text(encoding="utf-8"))]
     assert offenders == []
+
+
+def test_version_strings_agree():
+    """pyproject.toml, CITATION.cff and the project entry of uv.lock carry the same version."""
+    pyproject = re.search(r'^version = "([^"]+)"', (ROOT / "pyproject.toml").read_text(encoding="utf-8"), re.M)
+    citation = re.search(r'^version: "([^"]+)"', (ROOT / "CITATION.cff").read_text(encoding="utf-8"), re.M)
+    lock = re.search(
+        r'^\[\[package\]\]\nname = "agentic-equity-research"\nversion = "([^"]+)"',
+        (ROOT / "uv.lock").read_text(encoding="utf-8"),
+        re.M,
+    )
+    assert pyproject and citation and lock
+    assert pyproject.group(1) == citation.group(1) == lock.group(1)

@@ -6,7 +6,8 @@ import logging
 import numpy as np
 import pandas as pd
 import pytest
-from sklearn.metrics import brier_score_loss
+from sklearn.dummy import DummyClassifier
+from sklearn.metrics import brier_score_loss, f1_score
 from sklearn.model_selection import TimeSeriesSplit
 from sklearn.pipeline import Pipeline
 
@@ -21,6 +22,8 @@ from aer.ml.constants import (
 from aer.ml.models import (
     HOLDOUT_FRACTION,
     FittedEnsemble,
+    _cross_validate,
+    _fold_f1,
     _make_lgbm,
     _make_logistic,
     _make_pipeline,
@@ -258,3 +261,46 @@ def test_fit_ensemble_still_fits_both_models_when_the_gate_fails(monkeypatch):
     assert result is not None
     assert result[0].prediction_skipped is True
     assert result[0].model_used == "none"
+
+
+def test_fold_f1_scores_a_single_class_fold_as_half_not_one():
+    score, single_class = _fold_f1(np.array([1, 1, 1]), np.array([1, 1, 1]))
+    assert score == 0.5
+    assert single_class is True
+
+
+def test_fold_f1_matches_plain_macro_f1_on_two_class_folds():
+    y_true = np.array([0, 1, 0, 1, 1, 0])
+    y_pred = np.array([0, 1, 1, 1, 0, 0])
+    score, single_class = _fold_f1(y_true, y_pred)
+    assert score == pytest.approx(f1_score(y_true, y_pred, average="macro"))
+    assert single_class is False
+
+
+def test_fold_f1_is_not_single_class_when_predictions_add_the_second_class():
+    score, single_class = _fold_f1(np.array([1, 1, 1]), np.array([1, 0, 1]))
+    assert single_class is False
+    assert score == pytest.approx(f1_score([1, 1, 1], [1, 0, 1], labels=[0, 1], average="macro", zero_division=0))
+
+
+def test_cross_validate_scores_single_class_folds_at_half_and_counts_them():
+    X = pd.DataFrame({"f": np.arange(12, dtype=float)})
+    y = np.array([0, 1, 0, 1, 0, 1, 1, 1, 1, 0, 1, 0])
+    train = np.arange(6)
+    splits = [(train, np.array([6, 7, 8])), (train, np.array([9, 10, 11]))]
+    pipe = _make_pipeline(DummyClassifier(strategy="constant", constant=1))
+    result = _cross_validate(pipe, X, y, splits)
+    two_class_expected = f1_score([0, 1, 0], [1, 1, 1], average="macro")
+    assert result.f1_scores[0] == 0.5
+    assert result.f1_scores[1] == pytest.approx(two_class_expected)
+    assert result.single_class_folds == 1
+
+
+def test_cross_validate_reports_zero_single_class_folds_when_every_fold_has_two_classes():
+    X = pd.DataFrame({"f": np.arange(12, dtype=float)})
+    y = np.array([0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1])
+    train = np.arange(6)
+    splits = [(train, np.array([6, 7, 8])), (train, np.array([9, 10, 11]))]
+    pipe = _make_pipeline(DummyClassifier(strategy="constant", constant=1))
+    result = _cross_validate(pipe, X, y, splits)
+    assert result.single_class_folds == 0

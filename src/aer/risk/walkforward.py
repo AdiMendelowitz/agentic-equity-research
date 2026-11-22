@@ -182,7 +182,9 @@ def run_walk_forward(ticker: str, as_of_date: date) -> WalkForwardResult:
                     signals = generate(is_history_multiindex, signal_date, [ticker])
                 except Exception as sig_err:
                     raise RuntimeError(f"signal generation failed at {signal_date}: {sig_err}") from sig_err
-                oos_signals.append(signals[0].action if signals else "HOLD")
+                if not signals:
+                    raise RuntimeError(f"signal generation returned no signal at {signal_date}")
+                oos_signals.append(signals[0].action)
 
             # Compute OOS returns (daily returns from closing prices)
             oos_close = oos_history["Close"]

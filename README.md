@@ -263,7 +263,7 @@ A null result means little unless the harness can find a signal when one is ther
 
 <p align="center"><img src="docs/img/detection_curve_v3.svg" alt="Control version 3 balanced accuracy by signal strength, with per-seed points, intervals and the pre-registered margin" width="720"></p>
 
-The current control, version 3, is pre-registered. It scores the two-model ensemble on 46 fresh seeds per strength, on every seed whether or not the gate passed, so it measures the estimator and not the system with abstention. Its specification, `docs/prereg/control-v3.md`, was released in a public commit and hashed in [issue 1](https://github.com/AdiMendelowitz/agentic-equity-research/issues/1) before the first public commit of the results; the seed count comes from a power calculation for a margin of 0.03.
+The current control, version 3, is pre-registered. It scores the two-model ensemble on 46 fresh seeds per strength, on every seed whether or not the gate passed, so it measures the estimator and not the system with abstention. Its specification, `docs/prereg/control-v3.md`, was released in a public commit and hashed in [issue 1](https://github.com/AdiMendelowitz/agentic-equity-research/issues/1) before the first public commit of the results; the seed count comes from a power calculation for a margin of 0.03. Correction, 22 November 2026 (package version 0.1.5): one cross-validation fold in one cell (signal 0.6, seed 1008) was scored 1.0 because its true labels and predictions were all one class; the row is corrected and no verdict, table, figure or number here changes, as recorded in `docs/prereg/control-v3-deviations.md`.
 
 | Signal strength s | Ensemble balanced accuracy, every seed | Pre-registered test | Verdict | Gate passed |
 | --- | --- | --- | --- | --- |
@@ -314,7 +314,7 @@ Five expectations, defined in `src/aer/demo/control.py`, were written down befor
 
 The negative control was met narrowly. At zero signal the upper bound of the interval is only 0.002 above 0.50, and the mean sits below 0.50; the interval includes 0.50, which does not make the model equivalent to chance. At s = 0.6 the model's margin over chance is 0.074, against 0.202 for the oracle. The gate fired in 20%, 20% and 30% of seeds as the signal grew, and the paired comparison on the report page found no clear change in how often it passed.
 
-The first run failed as a design and stays on record in `docs/data/detection_curve_run1.csv`. Its injected signal fed back on itself, which turned the strongest setting into a runaway trend, and raw accuracy tracked the label base rate. Version 2 removed the feedback and switched to balanced accuracy. The command is `uv run python docs/report/run_control.py`.
+The first run failed as a design and stays on record in `docs/data/detection_curve_run1.csv`. Its injected signal fed back on itself, which turned the strongest setting into a runaway trend, and raw accuracy tracked the label base rate. Version 2 removed the feedback and switched to balanced accuracy. The command is `uv run python docs/report/run_control.py`; the committed file is the run of 10 November 2026, which reproduces from the code of that day but not from the current code, whose replay differs in all 60 rows (`docs/prereg/control-v3-deviations.md`).
 
 </details>
 

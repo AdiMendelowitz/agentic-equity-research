@@ -210,6 +210,14 @@ class _CvResult:
     f1_scores: np.ndarray
     oof_index: np.ndarray
     oof_probs: np.ndarray
+    single_class_folds: int  # folds whose true and predicted labels together hold one class (scored 0.5, not 1.0)
+
+
+def _fold_f1(y_true: np.ndarray, y_pred: np.ndarray) -> tuple[float, bool]:
+    """Macro F1 over both classes for one fold, and whether truth and predictions together hold a single class."""
+    single_class = len(np.union1d(y_true, y_pred)) == 1
+    score = f1_score(y_true, y_pred, labels=[0, 1], average="macro", zero_division=0)
+    return float(score), single_class
 
 
 def _split_cv_holdout(n_rows: int) -> tuple[slice, slice]:
@@ -234,14 +242,17 @@ def _cross_validate(
     f1_scores: list[float] = []
     oof_index: list[np.ndarray] = []
     oof_probs: list[np.ndarray] = []
+    single_class_folds = 0
     for train_idx, test_idx in splits:
         fold_pipe = clone(pipe).set_output(transform="pandas")
         fold_pipe.fit(X.iloc[train_idx], y[train_idx])
         X_test = X.iloc[test_idx]
-        f1_scores.append(float(f1_score(y[test_idx], fold_pipe.predict(X_test), average="macro")))
+        fold_f1, single_class = _fold_f1(y[test_idx], fold_pipe.predict(X_test))
+        f1_scores.append(fold_f1)
+        single_class_folds += int(single_class)
         oof_index.append(test_idx)
         oof_probs.append(fold_pipe.predict_proba(X_test)[:, 1])
-    return _CvResult(np.asarray(f1_scores), np.concatenate(oof_index), np.concatenate(oof_probs))
+    return _CvResult(np.asarray(f1_scores), np.concatenate(oof_index), np.concatenate(oof_probs), single_class_folds)
 
 
 def _fit_platt_calibrator(probs: np.ndarray, y: np.ndarray) -> Any | None:
@@ -300,6 +311,12 @@ def fit_ensemble(feature_df: pd.DataFrame) -> FittedEnsemble | None:
     lgbm_pipe = _make_pipeline(_make_lgbm())
     logreg_cv = _cross_validate(logreg_pipe, X_cv, y_cv, splits)
     lgbm_cv = _cross_validate(lgbm_pipe, X_cv, y_cv, splits)
+    if logreg_cv.single_class_folds or lgbm_cv.single_class_folds:
+        logger.info(
+            "cross-validation folds whose labels and predictions hold one class: logistic %d, lightgbm %d",
+            logreg_cv.single_class_folds,
+            lgbm_cv.single_class_folds,
+        )
 
     # Model selection: higher mean F1 wins; tie → logistic (lighter, faster)
     use_lgbm = lgbm_cv.f1_scores.mean() > logreg_cv.f1_scores.mean()

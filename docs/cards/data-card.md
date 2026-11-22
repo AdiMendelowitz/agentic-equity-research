@@ -18,7 +18,7 @@ This card describes the files in `docs/data`, in the spirit of Datasheets for Da
 | `detection_curve_v3.csv` | 138 | Pre-registered control version 3, 46 seeds at each of three signal strengths |
 | `exploratory_zero_signal_v3.csv` | 14 | Summary of an exploratory diagnostic at zero signal, as metric and value pairs |
 
-The control files carry one row per seed and signal strength. Version 3 records the signal, seed, whether the gate passed, the model used, the cross-validation F1 mean and standard deviation, balanced accuracy of the two-model ensemble, scored on every seed whether or not the gate passed, and of the oracle, the holdout Brier score of the ensemble, the majority-class accuracy, the label base rate and the number of out-of-sample rows.
+The control files carry one row per seed and signal strength. Version 3 records the signal, seed, whether the gate passed, the model used, the cross-validation F1 mean and standard deviation, balanced accuracy of the two-model ensemble, scored on every seed whether or not the gate passed, and of the oracle, the holdout Brier score of the ensemble, the majority-class accuracy, the label base rate and the number of out-of-sample rows. One row of `detection_curve_v3.csv` was corrected on 22 November 2026 (package version 0.1.5); the correction and the specification it leaves frozen are described in `docs/prereg/control-v3-deviations.md`, which sits beside `docs/prereg/control-v3.md` and is not a data file.
 
 ## Unit of analysis
 
@@ -36,6 +36,8 @@ The control files are synthetic. They are written by scripts in `docs/report`:
 - `run_control_v3.py` writes `detection_curve_v3.csv`.
 - `explore_zero_signal_v3.py` with `--write` writes `exploratory_zero_signal_v3.csv`.
 - `power_v3.py` reads `detection_curve.csv` for standard deviations and prints the seed count.
+
+`detection_curve.csv` is the control version 2 pilot, run on 10 November 2026, and it reproduces byte for byte from the development code of that day, with no single-class cross-validation fold, but not from the current code, while `power_v3.py` reads the committed file, so the pre-registered seed count does not depend on a rerun. `eval_backtest_sharpe.csv` is written from the backtesting step's Sharpe ratio of recorded briefs, and the walk-forward module, where issue #34 was fixed, does not feed it.
 
 Each control injects a known signal into synthetic prices, with 1,500 sessions per seed. Seed counts and arithmetic for detectable effects are in `src/aer/evaluation/power.py` and `docs/report/power_v3.py`.
 
@@ -68,4 +70,4 @@ uv run python docs/report/build_report.py --out site
 uv run python docs/report/reproduce.py
 ```
 
-`build_figures.py` regenerates the figures from `docs/data`, and `build_report.py` computes every number on the report page from a file there, except the counts in the correction note and its table and the assumed design effects, which are literals in `build_report.py`, and records an input hash in the footer. `reproduce.py` re-runs the pre-registered control and the figure script and compares their output with the committed files, the figures after normalising the sign of zero and hashed element ids, then prints `RESULT: REPRODUCED` or `RESULT: DIFFERS`.
+`build_figures.py` regenerates the figures from `docs/data`, and `build_report.py` computes every number on the report page from a file there, except the counts in the correction note and its table, the figures in the control version 3 correction paragraph and the assumed design effects, which are literals in `build_report.py`, and records an input hash in the footer. `reproduce.py` re-runs the pre-registered control and the figure script and compares their output with the committed files, the figures after normalising the sign of zero and hashed element ids, then prints `RESULT: REPRODUCED` or `RESULT: DIFFERS`.
