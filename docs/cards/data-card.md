@@ -9,7 +9,7 @@ This card describes the files in `docs/data`, in the spirit of Datasheets for Da
 | `eval_sample.csv` | 5 | Sample counts as metric and value pairs: ticker-days, tickers, first and last brief month, resolved rows |
 | `eval_recommendation.csv` | 4 | Rows, resolved rows and correct calls for each recommendation |
 | `eval_calibration.csv` | 6 | Resolved and correct counts by conviction bin |
-| `eval_ml_gate.csv` | 7 | Rows, skipped rows, resolved and correct ML predictions by cross-validation F1 bin |
+| `eval_ml_gate.csv` | 7 | Rows, skipped rows, resolved and correct ML predictions by bin of mean cross-validation F1. A skipped row is binned by the mean F1 of the selected model, the one the gate checked. A predicted row is binned by the mean F1 stored with it, which is the LightGBM member's for predictions recorded with the two-model ensemble and the selected model's for earlier ones |
 | `eval_backtest_sharpe.csv` | 6 | Row counts by Sharpe bin |
 | `run_history.csv` | 29 | Run date, outcome and exit code of scheduled runs; 22 completed with exit code 0, 2 completed with a non-zero code and 5 left no end line |
 | `llm_usage.jsonl` | 33 | One usage record per run, with call and token totals and a breakdown by provider and model |

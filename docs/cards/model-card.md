@@ -27,7 +27,7 @@ A research demonstration of an evaluation method. It is not investment advice an
 
 The superiority tests compare each strength with 0.50, and the 0.03 margin applies only to the equivalence test at zero signal. The lower bound at 0.3 lies inside the zero-signal interval, and no test between signal strengths was pre-registered, so the table supports comparisons with 0.50 only.
 
-**Recorded output.** 314 of 629 resolved calls were correct (0.499, 95% Wilson interval 0.460 to 0.538, assuming independent calls), counting one decision per ticker and day. Detecting 0.55 against 0.50 would need about 780 independent calls under a two-sided test at the 5% level with 80% power, by the normal approximation in `src/aer/evaluation/power.py`. A rule that always says down scores 350 of 629 (0.556) on the same calls. The ML gate predicted on 139 of 2,112 rows, and 64 of the 120 resolved predictions were correct (0.533). These recorded predictions are the LightGBM member's direction, while the control scores the calibrated ensemble. The figures were corrected on 17 November 2026.
+**Recorded output.** 314 of 629 resolved calls were correct (0.499, 95% Wilson interval 0.460 to 0.538, assuming independent calls), counting one decision per ticker and day. Detecting 0.55 against 0.50 would need about 780 independent calls under a two-sided test at the 5% level with 80% power, by the normal approximation in `src/aer/evaluation/power.py`. A rule that always says down scores 350 of 629 (0.556) on the same calls. The ML gate predicted on 139 of 2,112 rows, and 64 of the 120 resolved predictions were correct (0.533). These recorded predictions carry the LightGBM member's direction when they were recorded with the two-model ensemble and the selected model's direction when recorded before it, while the control scores the calibrated ensemble. The figures were corrected on 17 November 2026.
 
 ## Effective configuration
 
@@ -40,7 +40,7 @@ The LightGBM classifier sets `subsample=1.0` and leaves `subsample_freq` at 0, s
 - In version 3 the model scores slightly above 0.50 on pure noise, within the pre-registered margin, and the cause is not identified.
 - Only the LightGBM member is Platt-calibrated.
 - Recorded calls are scored by direction at zero on adjusted closes, while the ML label is a five-day return above a 10 basis point cost on unadjusted closes.
-- The 139 published ML predictions were recorded under an earlier rule that kept the LightGBM member's direction.
+- The 139 published ML predictions were recorded under earlier rules, which kept the LightGBM member's direction once the two-model ensemble was added and the selected model's direction before it.
 - Briefs are scored against a five-day move, while the underlying thesis spans weeks to months.
 - Live mode is absent.
 

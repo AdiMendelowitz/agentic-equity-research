@@ -253,7 +253,7 @@ Detecting a hit rate of 0.55 against 0.50 with 80% power at a two-sided 5% level
 <details>
 <summary>Results by conviction, recommendation and ML gate (descriptive only)</summary>
 
-By conviction bin, the 0.6 bin scored 119 of 261 (0.456), the 0.7 bin 174 of 316 (0.551) and the 0.8 bin 19 of 48 (0.396). By recommendation, BUY scored 104 of 244 (0.426), SELL 107 of 217 (0.493) and AVOID 103 of 168 (0.613). All 1,572 HOLD rows were never resolved. The ML gate predicted on 139 of 2,112 rows, and 64 of the 120 resolved predictions were correct (0.533); those recorded predictions are the LightGBM member's direction, while the control scores the calibrated ensemble.
+By conviction bin, the 0.6 bin scored 119 of 261 (0.456), the 0.7 bin 174 of 316 (0.551) and the 0.8 bin 19 of 48 (0.396). By recommendation, BUY scored 104 of 244 (0.426), SELL 107 of 217 (0.493) and AVOID 103 of 168 (0.613). All 1,572 HOLD rows were never resolved. The ML gate predicted on 139 of 2,112 rows, and 64 of the 120 resolved predictions were correct (0.533); those recorded predictions carry the LightGBM member's direction, or the selected model's for any recorded before the two-model ensemble was added, while the control scores the calibrated ensemble.
 
 </details>
 

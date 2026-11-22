@@ -2,6 +2,13 @@
 
 Package versions of agentic-equity-research. Until version 0.1.5 the package version stayed 0.1.0 while public commit titles carried their own labels (v0.1.1 to v0.1.5 between 11 and 15 November 2026, then v0.1); this file starts with the first release whose package version, `CITATION.cff` and `uv.lock` agree, and the public commit history is the record before it. Two public commits of 15 November 2026 (5d7635d and 962d6db) are titled v0.1.5; they are not this release.
 
+## Documentation update to 0.1.5 (22 November 2026, package version unchanged)
+
+Documented
+- `docs/cards/data-card.md` states which model's mean cross-validation F1 places each row of `eval_ml_gate.csv` in its bin.
+- `docs/prereg/control-v3-deviations.md` states how far issue #33 reaches into `eval_ml_gate.csv`, measured for all but at most 36 of its 2,112 rows, in place of the sentence that called it not measured; the data file is unchanged.
+- `docs/cards/model-card.md` and `README.md` say that ML predictions recorded before the two-model ensemble was added carry the selected model's direction, and those recorded with it the LightGBM member's.
+
 ## 0.1.5 (22 November 2026)
 
 Fixed
