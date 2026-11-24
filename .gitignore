@@ -15,6 +15,9 @@ eval_log/
 logs/
 # scratch of the release, quick-start and landing checks; a passing run removes its own
 .scratch/
+# local tool output and Claude Code session state
+.claude/
+graphify-out/
 # python
 __pycache__/
 *.py[cod]

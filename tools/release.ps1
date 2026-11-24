@@ -9,12 +9,13 @@
   redaction scan, fresh-environment quick start), and prints the file list. With -Publish it then asks for the word
   publish, places the export as a single new commit in the public repository and waits for its CI run.
   The public repository receives files only: no commit, branch, tag or Actions log of the private one.
+  The commit message defaults to "agentic-equity-research v<version>", the version read from pyproject.toml.
   Every line is written, UTF-8, to notes\runs\release-<timestamp>.log.
 #>
 param(
   [switch]$Publish,
   [string]$PublicUrl = "https://github.com/AdiMendelowitz/agentic-equity-research.git",
-  [string]$Message = "agentic-equity-research v0.1"
+  [string]$Message = ""
 )
 $ErrorActionPreference = "Stop"
 $repo = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
@@ -61,6 +62,13 @@ New-Item -ItemType Directory -Force -Path $work | Out-Null
 $mode = "DRY RUN"
 if ($Publish) { $mode = "PUBLISH" }
 Write-Log @("release started $stamp, mode $mode", "private folder $repo", "public target $PublicUrl", "work folder $work")
+
+if ([string]::IsNullOrWhiteSpace($Message)) {
+  $vm = [regex]::Match([System.IO.File]::ReadAllText((Join-Path $repo "pyproject.toml"), $utf8), '(?m)^version = "([^"]+)"')
+  if (-not $vm.Success) { Stop-Release "no version line in pyproject.toml for the commit message" }
+  $Message = "agentic-equity-research v$($vm.Groups[1].Value)"
+}
+Write-Log @("commit message: $Message")
 
 # 1. the private side must be the renamed repository, clean, and authored under the noreply identity
 $origin = (git --no-pager remote get-url origin)

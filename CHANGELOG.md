@@ -2,6 +2,19 @@
 
 Package versions of agentic-equity-research. Until version 0.1.5 the package version stayed 0.1.0 while public commit titles carried their own labels (v0.1.1 to v0.1.5 between 11 and 15 November 2026, then v0.1); this file starts with the first release whose package version, `CITATION.cff` and `uv.lock` agree, and the public commit history is the record before it. Two public commits of 15 November 2026 (5d7635d and 962d6db) are titled v0.1.5; they are not this release.
 
+## 0.1.6 (24 November 2026)
+
+Changed
+- Dependency updates in `uv.lock` to langgraph 1.2.23, pydantic-settings 2.16.3, numpy 2.5.5, pandas-market-calendars 5.6.1, empyrical-reloaded 0.7.3, anthropic 2.10.0, openai 3.55.1, pytest-asyncio 1.5.0 and ruff 0.17.5, with langgraph-prebuilt 1.1.3 as langgraph 1.2.23 resolves it. The committed figures and the report page rebuild unchanged.
+- The Pages workflow uses version 5 of `actions/upload-pages-artifact` and `actions/deploy-pages`.
+- `tools/release.ps1` names the package version in the title of each public commit.
+- Version 0.1.6 in `pyproject.toml`, `CITATION.cff` and `uv.lock`.
+
+Added
+- `tests/test_data_pins.py` pins the content of every file under `docs/data` by sha256, with line endings normalised as git stores them.
+
+Previous public commit: e038c47 (22 November 2026).
+
 ## Documentation update to 0.1.5 (22 November 2026, package version unchanged)
 
 Documented
