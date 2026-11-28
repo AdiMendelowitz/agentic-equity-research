@@ -1,6 +1,6 @@
 """Trading-day arithmetic. Single source of truth for all horizon calculations.
 
-One layer, NYSE-accurate throughout, R5, Adi 2026-09-24): every function here
+One layer, NYSE-accurate throughout (Adi, 2026-09-24): every function here
 is backed by ``pandas-market-calendars`` (XNYS), including ``add_trading_days`` and
 ``trading_days_between``, which until 2026-09-24 were holiday-blind ``pandas`` business-day helpers
 with a second hand-rolled copy in ``src/prefetch/earnings_window.py``. All nine call sites

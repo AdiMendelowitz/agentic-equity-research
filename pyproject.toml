@@ -1,6 +1,6 @@
 [project]
 name = "agentic-equity-research"
-version = "0.1.6"
+version = "0.2.0"
 description = "A multi-agent equity-research pipeline with cost-governed LLM routing, Python-first signal logic, a calibrated abstention gate and an honest evaluation layer. Demonstration project; not investment advice."
 readme = "README.md"
 license = { text = "MIT" }

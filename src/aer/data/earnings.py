@@ -12,7 +12,7 @@ from aer.utils.vintage_tracker import record_vintage
 
 logger = logging.getLogger(__name__)
 
-# CF-12: catalyst rows older than this window lose to a present yfinance date.
+# Catalyst rows older than this window lose to a present yfinance date.
 _CATALYST_EARNINGS_MAX_AGE_DAYS: int = 30
 
 # surprise% = (reported - estimated)/abs(estimated)*100 explodes when the estimate
@@ -21,7 +21,7 @@ _CATALYST_EARNINGS_MAX_AGE_DAYS: int = 30
 # inherently unstable for low-EPS names; median_surprise_pct is the robust companion stat.
 _MIN_EPS_BASE_FOR_SURPRISE: float = 0.05
 
-# A-02/T-09: the resolved catalyst override date is cached under this short-TTL key so the
+# The resolved catalyst override date is cached under this short-TTL key so the
 # hot path (a cache hit on the full earnings dict) does not open a fresh SQLite connection
 # and re-run the catalyst query on every call. TTL_QUOTE (1h) is the shortest existing
 # sensible TTL - short enough that a same-day reschedule is picked up promptly.
@@ -42,7 +42,7 @@ def _safe_int(val: Any) -> int:
 def _coerce_finite_float(val: Any) -> float | None:
     """Coerce a yfinance cell to a finite float, or None.
 
-    T-03: pd.isna can raise on array-valued cells and float() raises on non-scalars.
+    pd.isna can raise on array-valued cells and float() raises on non-scalars.
     Treat anything that does not cleanly coerce to a finite float as None.
     """
     if val is None:
@@ -62,7 +62,7 @@ def _catalyst_earnings_override(ticker: str, yf_date_str: str | None) -> str | N
 
 
 def _resolve_next_earnings_override(ticker: str, yf_date_str: str | None) -> str | None:
-    """Resolve the catalyst override once and cache the scalar result (A-02/T-09).
+    """Resolve the catalyst override once and cache the scalar result.
 
     On a short-TTL hit, return the cached resolved date without opening a SQLite connection.
     Only re-query the catalyst table when the key is absent/expired.
@@ -79,7 +79,7 @@ def _resolve_next_earnings_override(ticker: str, yf_date_str: str | None) -> str
 
 
 def get_next_earnings_date(ticker: str) -> date | None:
-    """Return the next earnings date for ticker, with catalyst table override (CF-12).
+    """Return the next earnings date for ticker, with catalyst table override.
 
     Checks the catalyst_events table first (SKILL/LSEG sources take precedence).
     Falls back to yfinance calendar on miss, table absence, or fresh install.
@@ -88,7 +88,7 @@ def get_next_earnings_date(ticker: str) -> date | None:
     date_str = data.get("next_earnings_date")
     if date_str is None:
         return None
-    # T-22: a non-ISO yfinance string (e.g. "06/01/2026") must not crash or silently yield
+    # A non-ISO yfinance string (e.g. "06/01/2026") must not crash or silently yield
     # None via fromisoformat. pd.to_datetime(errors="coerce") parses common formats and
     # returns NaT on genuine garbage.
     parsed = pd.to_datetime(date_str, errors="coerce")
@@ -100,7 +100,7 @@ def get_next_earnings_date(ticker: str) -> date | None:
 def _extract_calendar_dates(cal: Any) -> list[Any]:
     """Collect raw earnings-date candidates from a yfinance calendar (dict or DataFrame).
 
-    T-03: the dict branch's value may be a scalar (incl. NaT), an empty list, or a list with
+    The dict branch's value may be a scalar (incl. NaT), an empty list, or a list with
     NaT entries; the DataFrame branch exposes candidates on its index. Returns the raw cells;
     NaT/None filtering and forward selection happen in the caller.
     """
@@ -150,7 +150,7 @@ def get_earnings_data(ticker: str) -> dict[str, Any]:
 
     cached = cache.get(key)
     if cached is not None:
-        # A-02/T-09: build the returned dict by shallow-copying the cached dict and replacing
+        # Build the returned dict by shallow-copying the cached dict and replacing
         # only the next_earnings_date scalar. The override path mutates nothing else - the
         # nested earnings_history/analyst_recommendations lists are not touched here, and no
         # caller mutates them in place (they are read-only render inputs), so a shallow copy
@@ -262,8 +262,8 @@ def get_earnings_data(ticker: str) -> dict[str, Any]:
         errors.append(f"ticker: {type(e).__name__}")
         result["_errors"] = errors
 
-    # CF-12: apply the catalyst override at the cache-miss path (after yfinance fetch),
-    # routing through the cached resolver so the hot path stays connection-free (A-02).
+    # Apply the catalyst override at the cache-miss path (after yfinance fetch),
+    # routing through the cached resolver so the hot path stays connection-free.
     result["next_earnings_date"] = _resolve_next_earnings_override(ticker, result.get("next_earnings_date"))
     record_vintage("earnings")
     return result

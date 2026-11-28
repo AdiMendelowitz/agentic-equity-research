@@ -24,7 +24,7 @@ def compute_indicators(df: pd.DataFrame) -> dict[str, Any]:
     df.ta.sma(length=50, append=True)
     df.ta.sma(length=200, append=True)
 
-    # --- new P1 indicators ---
+    # --- stochastic, ATR and related indicators ---
     df.ta.stoch(k=14, d=3, smooth_k=3, append=True)
     df.ta.atr(length=14, append=True)  # ATRr_14 = absolute $ value, not percent
     df.ta.obv(append=True)
@@ -68,7 +68,6 @@ def compute_indicators(df: pd.DataFrame) -> dict[str, Any]:
         "bb_lower": last("BBL_20_2.0_2.0"),
         "sma50": last("SMA_50"),
         "sma200": last("SMA_200"),
-        # new P1
         "stoch_k": last("STOCHk_14_3_3"),
         "stoch_d": last("STOCHd_14_3_3"),
         "atr": last("ATRr_14"),

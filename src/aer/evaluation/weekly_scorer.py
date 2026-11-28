@@ -3,7 +3,7 @@
 Thread safety: _DB_LOCK (threading.Lock) for in-process serialisation.
 Cross-process: PRAGMA busy_timeout=5000 on each connection.
 
-Note on synth_correct (M9 design review):
+Note on synth_correct:
 synth_correct compares a weeks-to-months LLM thesis against 5-day price movement.
 This metric is logged for observability. It is NOT used in should_trigger_review()
 to make model replacement decisions - the five-day proxy does not
@@ -12,11 +12,13 @@ match the horizon of the LLM thesis, and which side the mismatch favours is not 
 What the stored columns mean:
 - actual_direction is UP when the five-day return on adjusted closes is above zero and DOWN otherwise. There is
   no cost band, so a wrong BUY fixes the outcome as DOWN and a wrong SELL or AVOID fixes it as UP.
-- ml_direction is the direction of the member the brief carried (the LightGBM member for rows written before
-  17 Nov 2026, which include every published aggregate, and the member the gate checked from then on, see
-  aer.ml.models.selected_prediction). The ensemble direction is not stored, and ml_correct scores that member.
+- ml_direction is the direction of the member the gate checked (aer.ml.models.selected_prediction). Rows written
+  before 17 Nov 2026, which include every published aggregate, carry the LightGBM member's direction once the
+  two-model ensemble was added and the selected model's direction before it. The ensemble direction is not stored,
+  and ml_correct scores the stored direction.
 - The ML label in aer.ml.features is a return above a 10 basis point cost on unadjusted closes, so ml_correct
   and the training target are not the same quantity.
+- v0.3 experiment results never go into this store.
 """
 
 import json
@@ -24,11 +26,12 @@ import logging
 import sqlite3
 import threading
 import time
+import uuid
 from datetime import date
 
 import yfinance as yf
 
-from aer.evaluation.eval_models import EVAL_SCHEMA, compute_synth_correct
+from aer.evaluation.eval_models import EVAL_SCHEMA, EVAL_UNIQUE_INDEX, compute_synth_correct
 from aer.evaluation.spec import DEFAULT_SPEC
 from aer.ml.constants import (
     BASELINE_WINDOW_WEEKS,
@@ -47,6 +50,12 @@ logger = logging.getLogger(__name__)
 
 _EVAL_DB_PATH = _PROJECT_ROOT / "eval_log" / "eval.db"
 _DB_LOCK = threading.Lock()
+_RUN_ID = uuid.uuid4().hex
+_skipped_reruns = 0
+
+
+class DuplicateTickerDayError(RuntimeError):
+    """The store holds more than one row for a ticker-day, so the unique index cannot be created."""
 
 
 def _connect() -> sqlite3.Connection:
@@ -54,19 +63,66 @@ def _connect() -> sqlite3.Connection:
     return connect_db(str(_EVAL_DB_PATH), busy_timeout_ms=5000, row_factory=sqlite3.Row)
 
 
+def _has_table(conn: sqlite3.Connection) -> bool:
+    return conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='agent_eval'").fetchone() is not None
+
+
 def _init_db() -> None:
     with _DB_LOCK:
         conn = _connect()
-        for stmt in EVAL_SCHEMA.strip().split(";"):
-            stmt = stmt.strip()
-            if stmt:
-                conn.execute(stmt)
-        conn.commit()
-        conn.close()
+        try:
+            if _has_table(conn):
+                dupes = conn.execute(
+                    "SELECT COUNT(*) FROM (SELECT 1 FROM agent_eval GROUP BY ticker, brief_date HAVING COUNT(*) > 1)"
+                ).fetchone()[0]
+                if dupes:
+                    raise DuplicateTickerDayError(
+                        f"{_EVAL_DB_PATH} holds {dupes} ticker-day{'' if dupes == 1 else 's'} with more than one row. "
+                        "Nothing was changed. "
+                        "Back up the file, then call remove_duplicate_ticker_days() once to keep the lowest id per day."
+                    )
+            for stmt in EVAL_SCHEMA.strip().split(";"):
+                stmt = stmt.strip()
+                if stmt:
+                    conn.execute(stmt)
+            if "run_id" not in {r[1] for r in conn.execute("PRAGMA table_info(agent_eval)")}:
+                try:
+                    conn.execute("ALTER TABLE agent_eval ADD COLUMN run_id TEXT")
+                except sqlite3.OperationalError:
+                    # Another process may have added the column first, so re-raise only if it is still missing.
+                    if "run_id" not in {r[1] for r in conn.execute("PRAGMA table_info(agent_eval)")}:
+                        raise
+            conn.execute(EVAL_UNIQUE_INDEX)
+            conn.commit()
+        finally:
+            conn.close()
+
+
+def remove_duplicate_ticker_days() -> int:
+    """Delete every agent_eval row that is not the lowest id of its ticker-day. Returns the number deleted.
+
+    Explicit and never called by _init_db. It does not create the store or its table. It deletes permanently from the
+    store at _EVAL_DB_PATH, so copy the file first.
+    """
+    if not _EVAL_DB_PATH.is_file():
+        return 0
+    with _DB_LOCK:
+        conn = connect_db(str(_EVAL_DB_PATH), busy_timeout_ms=5000)
+        try:
+            if not _has_table(conn):
+                return 0
+            deleted = conn.execute(
+                "DELETE FROM agent_eval WHERE id NOT IN (SELECT MIN(id) FROM agent_eval GROUP BY ticker, brief_date)"
+            ).rowcount
+            conn.commit()
+            return deleted
+        finally:
+            conn.close()
 
 
 def record_brief_generated(brief: InvestmentBrief, quality_metrics: dict) -> None:
     """Write a PENDING eval row for this brief. Call after invoke_pipeline() returns."""
+    global _skipped_reruns
     _init_db()
     today_str = date.today().isoformat()
     resolution_date = add_trading_days(date.today(), DEFAULT_SPEC.resolution_lag_trading_days).isoformat()
@@ -76,7 +132,7 @@ def record_brief_generated(brief: InvestmentBrief, quality_metrics: dict) -> Non
     with _DB_LOCK:
         conn = _connect()
         try:
-            conn.execute(
+            cursor = conn.execute(
                 """
                 INSERT INTO agent_eval (
                     ticker, brief_date, recommendation, conviction,
@@ -84,8 +140,9 @@ def record_brief_generated(brief: InvestmentBrief, quality_metrics: dict) -> Non
                     ml_model_used, ml_prediction_skipped,
                     backtest_signal, backtest_sharpe,
                     vix_regime, structural_quality, resolution_date,
-                    resolution_status, resolution_attempts, created_at, updated_at
-                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    resolution_status, resolution_attempts, created_at, updated_at, run_id
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                ON CONFLICT(ticker, brief_date) DO NOTHING
                 """,
                 (
                     brief.ticker,
@@ -107,9 +164,18 @@ def record_brief_generated(brief: InvestmentBrief, quality_metrics: dict) -> Non
                     0,
                     now,
                     now,
+                    _RUN_ID,
                 ),
             )
             conn.commit()
+            if cursor.rowcount == 0:
+                _skipped_reruns += 1
+                logger.warning(
+                    "agent_eval row for %s on %s already exists, rerun skipped (%d skipped in this process)",
+                    brief.ticker,
+                    today_str,
+                    _skipped_reruns,
+                )
         finally:
             conn.close()
 

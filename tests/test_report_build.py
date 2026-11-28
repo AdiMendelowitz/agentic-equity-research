@@ -477,12 +477,20 @@ def test_by_recommendation_table_follows_the_csv(site: Path) -> None:
     rows = _tables(site)["by-recommendation"]
     by_rec = {r["recommendation"]: r for r in _eval_rows()}
     assert [row[0] for row in rows] == ["BUY", "SELL", "AVOID"]
+    buy, sell, avoid = (by_rec[k] for k in ("BUY", "SELL", "AVOID"))
+    up = int(buy["n_synth_correct"]) + sum(int(r["n_resolved"]) - int(r["n_synth_correct"]) for r in (sell, avoid))
+    down = int(buy["n_resolved"]) - int(buy["n_synth_correct"]) + sum(int(r["n_synth_correct"]) for r in (sell, avoid))
+    assert (up, down) == (279, 350)
     for row in rows:
         source = by_rec[row[0]]
         resolved, correct = int(source["n_resolved"]), int(source["n_synth_correct"])
         assert row[1] == f"{resolved:,}"
         assert row[2] == f"{correct:,}"
         assert row[3] == f"{correct / resolved:.3f}"
+        matching = up if row[0] == "BUY" else down
+        assert row[5] == f"{matching / 629:.3f}"
+    assert [row[5] for row in rows] == ["0.444", "0.556", "0.556"]
+    assert "not adjusted for multiplicity" in (site / "index.html").read_text(encoding="utf-8")
 
 
 def test_control_v3_primary_rows_follow_the_csv_and_the_preregistered_code(site: Path) -> None:

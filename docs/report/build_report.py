@@ -1,8 +1,8 @@
 """Build the static evaluation report (one HTML page plus figures) from the committed data.
 
-Every count, rate and interval on the page is computed here from a file under docs/data, except the historical
-correction table (CORRECTION_ROWS), whose counts are literals. The design effects are assumed values set in this
-module, and the footer records the hash of every file in docs/data.
+Every number on the page is computed here from a file under docs/data, except the counts in the correction note and
+its table, the figures in the control version 3 correction paragraph and the assumed design effects, which are
+literals in this module. The footer records the hash of every file in docs/data.
 """
 
 from __future__ import annotations
@@ -318,6 +318,7 @@ def detection_section(summaries: Sequence[SignalSummary]) -> str:
     return (
         '<section id="control"><h2>Control experiment, version 2</h2>'
         "<p>This is version 2 of the control, kept on record beside the pre-registered version 3 in the next section. "
+        "It was run on 10 November 2026, before version 0.1.3, and version 3 supersedes it. "
         "Synthetic prices with a known injected signal; no market data. Seeds are treated as independent "
         "replications. Every interval in the table below is a 95% Student's t interval over seeds "
         f"({_t_note(summaries)}). The oracle-minus-model gap is computed within each seed, so it is paired.</p>"
@@ -616,18 +617,18 @@ def design_effect_rows(correct: float, n: float, effects: Sequence[float] = DESI
     return rows
 
 
-def _recommendation_row(rec: str, row: dict[str, str]) -> str:
+def _recommendation_row(rec: str, row: dict[str, str], base_rate: float) -> str:
     resolved, correct = int(row["n_resolved"]), int(row["n_synth_correct"])
     if resolved == 0:
         return (
             f'<tr><td>{rec}</td><td class="n">0</td><td class="n">0</td>'
-            '<td class="n">n/a</td><td class="n">n/a</td></tr>'
+            f'<td class="n">n/a</td><td class="n">n/a</td><td class="n">{base_rate:.3f}</td></tr>'
         )
     interval = wilson_interval(correct, resolved)
     return (
         f'<tr><td>{rec}</td><td class="n">{resolved:,}</td><td class="n">{correct:,}</td>'
         f'<td class="n">{correct / resolved:.3f}</td>'
-        f'<td class="n">{_range(interval.low, interval.high)}</td></tr>'
+        f'<td class="n">{_range(interval.low, interval.high)}</td><td class="n">{base_rate:.3f}</td></tr>'
     )
 
 
@@ -665,15 +666,22 @@ def baselines_section() -> str:
         for r in design_effect_rows(correct, n)
     )
     by_row = {r["recommendation"]: r for r in rows}
-    rec_rows = "".join(_recommendation_row(rec, by_row[rec]) for rec in RECOMMENDATIONS if rec in by_row)
+    matching_rate = {"BUY": rates["always_bullish"], "SELL": rates["always_bearish"], "AVOID": rates["always_bearish"]}
+    rec_rows = "".join(
+        _recommendation_row(rec, by_row[rec], matching_rate[rec]) for rec in RECOMMENDATIONS if rec in by_row
+    )
     return (
         '<section id="evaluation-baselines"><h2>Recorded calls against simple baselines</h2>'
         f"<p>Recorded accuracy is {correct:,} of {n:,} ({accuracy:.3f}), with a {confidence} Wilson interval of "
         f"{_range(interval.low, interval.high)}. The interval assumes independent calls.</p>"
         '<table id="by-recommendation"><caption>Accuracy by recommendation</caption>'
         '<thead><tr><th scope="col">Recommendation</th><th scope="col">Resolved</th><th scope="col">Correct</th>'
-        f'<th scope="col">Accuracy</th><th scope="col">{confidence} Wilson interval</th></tr></thead>'
+        f'<th scope="col">Accuracy</th><th scope="col">{confidence} Wilson interval</th>'
+        '<th scope="col">Base rate of the matching move</th></tr></thead>'
         f"<tbody>{rec_rows}</tbody></table>"
+        "<p>The last column is the share of all resolved actionable calls followed by the move that makes the "
+        "recommendation correct, an up move for BUY and a down move for SELL and AVOID. The three comparisons "
+        "of accuracy with base rate are descriptive and not adjusted for multiplicity.</p>"
         '<table id="baselines"><caption>Simple rules on the same resolved calls</caption>'
         '<thead><tr><th scope="col">Rule</th><th scope="col">Correct</th><th scope="col">Accuracy</th>'
         f"</tr></thead><tbody>{baseline_rows}</tbody></table>"

@@ -106,7 +106,7 @@ def run_walk_forward(ticker: str, as_of_date: date) -> WalkForwardResult:
     # Seed for reproducibility
     random.seed(42)
 
-    # Fetch raw price history raw prices matched to signal generation)
+    # Fetch raw price history (raw prices matched to signal generation)
     try:
         price_history = get_price_history_raw(ticker)
         on_or_before = np.fromiter((ts.date() <= as_of_date for ts in price_history.index), dtype=bool)
@@ -167,7 +167,7 @@ def run_walk_forward(ticker: str, as_of_date: date) -> WalkForwardResult:
             is_history_multiindex = is_history.copy()
             is_history_multiindex.columns = is_multiindex
 
-            # Generate signals for all OOS bars one bar at a time, IS-only history)
+            # Generate signals for all OOS bars one bar at a time (IS-only history)
             from aer.simulation.signal_generator import generate  # Local import to avoid circular dependency
 
             oos_signals: list[str] = []

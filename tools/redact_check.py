@@ -61,7 +61,7 @@ DENY_HASHES = {
 TOKEN = re.compile(r"[A-Za-z][A-Za-z0-9_-]{3,}")
 PRICE_LEVEL = re.compile(
     r"\$\s?\d"
-)  # replay fixtures carry no currency amount at all (ADR-05); levels are redacted at extraction
+)  # replay fixtures carry no currency amount at all; levels are redacted at extraction
 ALLOW = {"email": {"noreply@github.com", "name@example.com"}}
 
 

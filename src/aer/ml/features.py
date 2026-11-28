@@ -4,12 +4,12 @@ Single-pass approach: compute all pandas-ta indicators with append=True on df.co
 then build one row per trading day by reading column values at each bar's index.
 This mirrors harness._compute_signals() performance characteristics (~1.5s for 756 bars).
 
-Design review fixes applied:
-- B1: Uses get_price_history_raw (auto_adjust=False), not get_price_history
-- B2: Per-bar column reads, not .iloc[-1] snapshot broadcast
-- H2: Split guard - labels for bars with splits in the (t, t+5] window are NaN
-- M1: ISA_9 excluded conservatively (Senkou Span A is plotted 26 bars ahead; its row alignment was not verified)
-- L1: rolling_52w_high/low via .rolling(252) not .tail(252)
+Design decisions:
+- Uses get_price_history_raw (auto_adjust=False), not get_price_history
+- Per-bar column reads, not .iloc[-1] snapshot broadcast
+- Split guard: labels for bars with splits in the (t, t+5] window are NaN
+- ISA_9 excluded conservatively (Senkou Span A is plotted 26 bars ahead; its row alignment was not verified)
+- rolling_52w_high/low via .rolling(252) not .tail(252)
 """
 
 import logging
@@ -96,7 +96,7 @@ def build_feature_matrix(ticker: str, period: str = "3y", prices: pd.DataFrame |
     # Build label: cost-adjusted binary direction label for each bar
     # this label is NOT src/aer/data/opinions.py's forward_return_5d. Here: a binary, thresholded
     # at ROUND_TRIP_COST_BPS, on the dividend-UNADJUSTED path, with an explicit split guard. There:
-    # an uncosted continuous total return on the dividend-ADJUSTED path(B)). Same nominal
+    # an uncosted continuous total return on the dividend-ADJUSTED path. Same nominal
     # horizon, two definitions, both intentional; do not reconcile one into the other.
     # Guard: bars where a stock split falls within [t+1, t+PREDICTION_HORIZON_DAYS] get NaN label
     splits_col = df.get("Stock Splits", pd.Series(0.0, index=df.index))

@@ -38,11 +38,15 @@ CREATE TABLE IF NOT EXISTS agent_eval (
     resolution_attempts INTEGER NOT NULL DEFAULT 0,
     resolution_status   TEXT    NOT NULL DEFAULT 'PENDING',
     created_at          REAL    NOT NULL,
-    updated_at          REAL    NOT NULL
+    updated_at          REAL    NOT NULL,
+    run_id              TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_eval_ticker_date ON agent_eval(ticker, brief_date);
 CREATE INDEX IF NOT EXISTS idx_eval_resolution ON agent_eval(resolution_date, resolution_status)
 """
+
+# Created last by _init_db, after the duplicate check and the run_id migration.
+EVAL_UNIQUE_INDEX: str = "CREATE UNIQUE INDEX IF NOT EXISTS uq_eval_ticker_brief_date ON agent_eval(ticker, brief_date)"
 
 
 @dataclass(frozen=True)

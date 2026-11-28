@@ -2,6 +2,21 @@
 
 Package versions of agentic-equity-research. Until version 0.1.5 the package version stayed 0.1.0 while public commit titles carried their own labels (v0.1.1 to v0.1.5 between 11 and 15 November 2026, then v0.1); this file starts with the first release whose package version, `CITATION.cff` and `uv.lock` agree, and the public commit history is the record before it. Two public commits of 15 November 2026 (5d7635d and 962d6db) are titled v0.1.5; they are not this release.
 
+## 0.2.0 (27 November 2026)
+
+Fixed
+- Evaluation store writes are idempotent per ticker-day, which closes the known limitation "Registering the same brief twice creates duplicate evaluation rows". A unique index covers ticker and brief date, each row carries the identifier of the pipeline run that wrote it, and an existing store gains that column on first use. A second write for a ticker-day keeps the first row and is logged. A store that already holds more than one row for a ticker-day is refused, unchanged, until `remove_duplicate_ticker_days()` keeps the lowest id of each day. Tests cover reruns, the migration, a concurrent migration and the clean-up. The README describes the store as built, and its roadmap item is removed. No file under `docs/data` changes. `EVAL_DB_SCHEMA_VERSION` stays 1 and `AgentEvalRecord` carries no run identifier in this release.
+
+Changed
+- Documentation corrected after an outside review of 0.1.6. The README results now say that only the stronger control setting clears the zero-signal interval, mark the always-bearish comparison as a description of one period, state that the recorded-output figures are extracted aggregates that cannot be regenerated here, give a Wilson interval for the ML hit rate, describe the paid-fallback figure as a share of calls, count the three conviction bins not listed, say that no HOLD row has a scored outcome, date the version 2 control before 0.1.3 and say that its command writes over the committed file, describe how `reproduce.py` compares figures, and state the ML direction rule as the cards do. The model card gives the same ML interval.
+- The report page shows the base rate of the matching move beside each recommendation's hit rate, says that the three comparisons are descriptive and not adjusted for multiplicity, and dates the version 2 control before 0.1.3.
+- Comments and docstrings no longer carry private review labels, and the `ml_direction` docstring says which member's direction each period of rows holds.
+- Dependency updates in `uv.lock` to anthropic 2.12.0, hypothesis 6.170.17, langgraph 1.2.24, openai 3.57.0, pydantic 2.14.4, pydantic-core 2.50.5 and ruff 0.17.6.
+- Both workflows use `astral-sh/setup-uv` 10.4.0, pinned by commit.
+- Version 0.2.0 in `pyproject.toml`, `CITATION.cff` and `uv.lock`.
+
+Previous public commit: 73a1c0f (24 November 2026).
+
 ## 0.1.6 (24 November 2026)
 
 Changed

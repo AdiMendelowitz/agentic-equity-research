@@ -85,7 +85,7 @@ def compute_risk(returns: pd.Series) -> RiskMetrics:
     Returns:
         RiskMetrics with all fields populated or None based on sample size guards.
     """
-    # C7 fix: Sort + dedup check on the DatetimeIndex before any computation
+    # Sort and dedup check on the DatetimeIndex before any computation
     returns = returns.sort_index()
     if returns.index.duplicated().any():
         logger.warning("compute_risk: duplicate dates in returns index — deduplicating")
